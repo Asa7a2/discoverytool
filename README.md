@@ -1,2 +1,2 @@
-# BARBERAPPS
+# DISCOVERYSITE
 App de agendamento para barbearia feito em Python
