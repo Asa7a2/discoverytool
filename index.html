@@ -1699,7 +1699,7 @@ async function delS(col, id){
 }
 
 // ── Access helpers ──
-function curRole(){ return window._curUser?.role||'zeus'; } // default zeus enquanto carrega
+function curRole(){ return window._curUser?.role||'zeus'; }
 function can(action){
   const r=curRole();
   const m={edit_visual:['zeus'],manage_lists:['zeus','admin'],manage_users:['zeus','admin'],
@@ -1731,6 +1731,7 @@ function getItems(key){ const L=getLists(); return L[key]?.items||DEFAULT_LISTS[
 
 // ── initApp called after auth ──
 window.initApp = async function(){
+  console.log('[Discovery] initApp called, _curUser:', JSON.stringify(window._curUser));
   // load all collections from Firebase
   S.projects  = await window.fbGetAll('projetos');
   S.companies = await window.fbGetAll('empresas');
@@ -1753,6 +1754,8 @@ window.initApp = async function(){
   // update UI
   updateSbUser();
   applyAccessRestrictions();
+  // Re-apply after short delay to ensure DOM is ready
+  setTimeout(()=>{ applyAccessRestrictions(); updateSbUser(); }, 300);
   // ensure home page is visible
   document.querySelectorAll('.page').forEach(x=>x.classList.remove('on'));
   document.querySelectorAll('.sb-link').forEach(x=>x.classList.remove('on'));
@@ -1776,19 +1779,36 @@ function updateSbUser(){
 }
 
 function applyAccessRestrictions(){
-  if(!window._curUser){ setTimeout(applyAccessRestrictions, 150); return; } // wait for auth
-  const r=curRole();
-  const isZeus=r==='zeus', isAdmin=['zeus','admin'].includes(r), canCreate=can('create_project');
-  // hide new project btn for viewer/editor
-  document.querySelectorAll('[onclick*="openNewProject"]').forEach(b=>{ b.style.display=canCreate?'':'none'; });
-  // clear db btn only for zeus
-  const clearBtn=document.getElementById('settings-ph-row'); if(clearBtn) clearBtn.style.display=isZeus?'flex':'none';
-  // settings sections visibility
-  const appSec=document.getElementById('section-appearance'); if(appSec) appSec.style.display=isZeus?'block':'none';
-  const sc=document.getElementById('settings-content'), sl=document.getElementById('settings-lock');
-  if(sc&&sl){ sc.style.display=isAdmin?'block':'none'; sl.style.display=isAdmin?'none':'block'; }
-  // add user btn
-  const abu=document.getElementById('btn-add-user'); if(abu) abu.style.display=isAdmin?'':'none';
+  // Read role directly - _curUser already set by auth before this is called
+  const role = window._curUser ? window._curUser.role : 'zeus';
+  const isZeus  = role === 'zeus';
+  const isAdmin = isZeus || role === 'admin';
+  const canEdit = isAdmin || role === 'editor';
+
+  console.log('[Access] role=', role, 'isZeus=', isZeus, 'isAdmin=', isAdmin);
+
+  // Settings page — content vs lock
+  const sc = document.getElementById('settings-content');
+  const sl = document.getElementById('settings-lock');
+  if (sc) sc.style.display = isAdmin ? 'block' : 'none';
+  if (sl) sl.style.display = isAdmin ? 'none'  : 'block';
+
+  // Appearance section — zeus only
+  const appSec = document.getElementById('section-appearance');
+  if (appSec) appSec.style.display = isZeus ? 'block' : 'none';
+
+  // Clear DB button — zeus only
+  const clearBtn = document.getElementById('settings-ph-row');
+  if (clearBtn) clearBtn.style.display = isZeus ? 'flex' : 'none';
+
+  // Add user button — admin+
+  const abu = document.getElementById('btn-add-user');
+  if (abu) abu.style.display = isAdmin ? '' : 'none';
+
+  // New project button — admin+
+  document.querySelectorAll('[onclick*="openNewProject"]').forEach(b => {
+    b.style.display = isAdmin ? '' : 'none';
+  });
 }
 
 // ── Permission matrix render ──
@@ -1966,15 +1986,21 @@ function nav(p){
   const nl=document.getElementById('nl-'+p);
   if(nl) nl.classList.add('on');
   if(p==='home')      renderHome();
-  if(p==='projetos')  renderProjects();
-  if(p==='reunioes')  renderMeetings();
-  if(p==='empresas') renderCos();
+  if(p==='projects')  renderProjects();
+  if(p==='meetings')  renderMeetings();
+  if(p==='companies') renderCos();
   if(p==='settings'){
-    const doSettings = () => {
-      if(!window._curUser){ setTimeout(doSettings, 150); return; }
-      applyAccessRestrictions(); renderListCatTabs();
-    };
-    doSettings();
+    const role = window._curUser?.role || 'zeus';
+    const isAdmin = ['zeus','admin'].includes(role);
+    const isZeus  = role === 'zeus';
+    console.log('[Settings] _curUser=', window._curUser, 'role=', role);
+    const sc = document.getElementById('settings-content');
+    const sl = document.getElementById('settings-lock');
+    const ap = document.getElementById('section-appearance');
+    if(sc) sc.style.display = isAdmin ? 'block' : 'none';
+    if(sl) sl.style.display = isAdmin ? 'none'  : 'block';
+    if(ap) ap.style.display = isZeus  ? 'block' : 'none';
+    renderListCatTabs();
   }
   if(p==='access')  { renderPermMatrix(); window.renderUsers&&window.renderUsers(); }
 }
