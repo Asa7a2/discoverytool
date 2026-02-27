@@ -135,15 +135,20 @@ window.renderUsers = async () => {
   cont.innerHTML=users.map(u=>{
     const m=ROLE_META[u.role]||ROLE_META.viewer;
     const isCur=u.email===window._curUser?.email;
-    return `<div style="display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--b0)">
-      <div style="font-size:22px">${m.icon}</div>
-      <div style="flex:1">
-        <div class="fw7 xs">${esc(u.name||u.email)} ${isCur?'<span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--green);background:var(--green-d);padding:1px 6px;border-radius:4px;border:1px solid rgba(54,211,153,.3)">VOCÊ</span>':''}</div>
-        <div class="xxs txt-dim mono">${esc(u.email)}</div>
-      </div>
-      <span style="font-family:'JetBrains Mono',monospace;font-size:9px;padding:3px 9px;border-radius:100px;border:1px solid;color:${m.color};border-color:${m.color}44;background:${m.color}18">${m.label}</span>
-      ${(window._curUser?.role==='zeus'||window._curUser?.role==='admin')?`<button class="btn btn-sec btn-xs btn-ic" onclick="editUser('${u.id}','${esc(u.name||'')}','${esc(u.email)}','${u.role}')">✏️</button><button class="btn btn-red btn-xs btn-ic" onclick="delUser('${u.id}')">🗑</button>`:''}
-    </div>`;
+    const youBadge = isCur ? '<span style="font-family:monospace;font-size:9px;color:var(--green);background:var(--green-d);padding:1px 6px;border-radius:4px;border:1px solid rgba(54,211,153,.3)">VOCÊ</span>' : '';
+    const actBtns = (window._curUser?.role==='zeus'||window._curUser?.role==='admin')
+      ? '<button class="btn btn-sec btn-xs btn-ic" onclick="editUser(\''+u.id+'\',\''+esc(u.name||'')+'\',\''+esc(u.email)+'\',\''+u.role+'\')">✏️</button>'
+        +'<button class="btn btn-red btn-xs btn-ic" onclick="delUser(\''+u.id+'\')">🗑</button>'
+      : '';
+    return '<div style="display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--b0)">'
+      +'<div style="font-size:22px">'+m.icon+'</div>'
+      +'<div style="flex:1">'
+        +'<div class="fw7 xs">'+esc(u.name||u.email)+' '+youBadge+'</div>'
+        +'<div class="xxs txt-dim" style="font-family:monospace;font-size:10px">'+esc(u.email)+'</div>'
+      +'</div>'
+      +'<span style="font-family:monospace;font-size:9px;padding:3px 9px;border-radius:100px;border:1px solid;color:'+m.color+';border-color:'+m.color+'44;background:'+m.color+'18">'+m.label+'</span>'
+      +actBtns
+      +'</div>';
   }).join('');
 };
 window.editUser=(id,name,email,role)=>{
