@@ -3,9 +3,150 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Discovery Tool · v3</title>
+<title>Discovery Tool · v4</title>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500;600&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
+  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { getFirestore, doc, getDoc, setDoc, deleteDoc,
+         collection, getDocs, onSnapshot, writeBatch, serverTimestamp }
+  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey:"AIzaSyCdyZUFiUIvDq_Is9DEcliY05PnuX9i7VM",
+  authDomain:"discoverytool-ca752.firebaseapp.com",
+  projectId:"discoverytool-ca752",
+  storageBucket:"discoverytool-ca752.firebasestorage.app",
+  messagingSenderId:"228996859166",
+  appId:"1:228996859166:web:e839b414c0039db478b50f"
+};
+const app = initializeApp(firebaseConfig);
+const auth= getAuth(app);
+const db  = getFirestore(app);
+
+/* ── expose to global (non-module) ── */
+window._db  = db;
+window._auth= auth;
+
+window.doGoogleLogin = async () => {
+  const p = new GoogleAuthProvider();
+  try { await signInWithPopup(auth,p); }
+  catch(e){ console.error(e); }
+};
+window.doSignOut = async () => {
+  await signOut(auth);
+};
+
+/* ── Firestore helpers ── */
+window.fbSave = async (col,id,data) => {
+  await setDoc(doc(db,col,id), {...data,_ts:Date.now()}, {merge:true});
+};
+window.fbDel = async (col,id) => {
+  await deleteDoc(doc(db,col,id));
+};
+window.fbGetAll = async (col) => {
+  const snap = await getDocs(collection(db,col));
+  return snap.docs.map(d=>({id:d.id,...d.data()}));
+};
+window.fbWatch = (col,cb) => {
+  return onSnapshot(collection(db,col), snap=>{
+    cb(snap.docs.map(d=>({id:d.id,...d.data()})));
+  });
+};
+window.fbClearAll = async () => {
+  if(!window._curUser||window._curUser.role!=='zeus'){toast('❌ Apenas Zeus pode limpar o banco');return;}
+  if(!confirm('⚠️ APAGAR TUDO? Projetos, reuniões, empresas. IRREVERSÍVEL!')) return;
+  const cols=['projects','meetings','companies','customLists'];
+  const batch= writeBatch(db);
+  for(const col of cols){
+    const snap=await getDocs(collection(db,col));
+    snap.docs.forEach(d=>batch.delete(d.ref));
+  }
+  await batch.commit();
+  S.companies=[]; S.projects=[]; S.meetings=[]; S.customLists={};
+  renderHome(); renderProjects(); renderMeetings(); renderCos();
+  toast('🗑 Banco limpo!');
+};
+
+/* ── Save user whitelist entry ── */
+window.saveUser = async () => {
+  const name  = document.getElementById('u-name')?.value.trim();
+  const email = document.getElementById('u-email')?.value.trim().toLowerCase();
+  const role  = document.getElementById('u-role')?.value||'viewer';
+  if(!name||!email){alert('Nome e e-mail obrigatórios');return;}
+  const key = email.replace(/\./g,'_');
+  await window.fbSave('whitelist', key, {name,email,role});
+  closeOv('ov-user');
+  renderUsers();
+  toast('Usuário salvo na whitelist!');
+};
+window.delUser = async (key) => {
+  if(!confirm('Remover usuário da whitelist?')) return;
+  await window.fbDel('whitelist', key);
+  renderUsers();
+  toast('Usuário removido');
+};
+window.renderUsers = async () => {
+  const cont=document.getElementById('users-list'); if(!cont) return;
+  const users = await window.fbGetAll('whitelist');
+  const ROLE_META={zeus:{icon:'🔱',label:'Zeus',color:'var(--gold)'},admin:{icon:'👑',label:'Admin',color:'var(--purple)'},editor:{icon:'📝',label:'Editor',color:'var(--blue)'},viewer:{icon:'👁',label:'Viewer',color:'var(--green)'}};
+  if(!users.length){cont.innerHTML='<div class="empty" style="padding:20px"><div class="empty-ic">👥</div><div class="xs txt-muted">Nenhum usuário na whitelist.</div></div>';return;}
+  cont.innerHTML=users.map(u=>{
+    const m=ROLE_META[u.role]||ROLE_META.viewer;
+    const isCur=u.email===window._curUser?.email;
+    return `<div style="display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--b0)">
+      <div style="font-size:22px">${m.icon}</div>
+      <div style="flex:1">
+        <div class="fw7 xs">${esc(u.name||u.email)} ${isCur?'<span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--green);background:var(--green-d);padding:1px 6px;border-radius:4px;border:1px solid rgba(54,211,153,.3)">VOCÊ</span>':''}</div>
+        <div class="xxs txt-dim mono">${esc(u.email)}</div>
+      </div>
+      <span style="font-family:'JetBrains Mono',monospace;font-size:9px;padding:3px 9px;border-radius:100px;border:1px solid;color:${m.color};border-color:${m.color}44;background:${m.color}18">${m.label}</span>
+      ${(window._curUser?.role==='zeus'||window._curUser?.role==='admin')?`<button class="btn btn-sec btn-xs btn-ic" onclick="editUser('${u.id}','${esc(u.name||'')}','${esc(u.email)}','${u.role}')">✏️</button><button class="btn btn-red btn-xs btn-ic" onclick="delUser('${u.id}')">🗑</button>`:''}
+    </div>`;
+  }).join('');
+};
+window.editUser=(id,name,email,role)=>{
+  document.getElementById('u-name').value=name;
+  document.getElementById('u-email').value=email;
+  document.getElementById('u-email').dataset.editId=id;
+  document.getElementById('u-role').value=role;
+  document.getElementById('m-user-t').textContent='Editar Usuário';
+  openOv('ov-user');
+};
+window.openNewUser=()=>{
+  if(!window._curUser||!['zeus','admin'].includes(window._curUser.role)){toast('❌ Sem permissão');return;}
+  ['u-name','u-email'].forEach(i=>{const e=document.getElementById(i);if(e){e.value='';delete e.dataset.editId;}});
+  document.getElementById('u-role').value='editor';
+  document.getElementById('m-user-t').textContent='Novo Usuário';
+  openOv('ov-user');
+};
+
+/* ── Auth state ── */
+onAuthStateChanged(auth, async(user)=>{
+  if(user){
+    const key=user.email.replace(/\./g,'_');
+    let wSnap;
+    try{ wSnap=await getDoc(doc(db,'whitelist',key)); }catch(e){ wSnap={exists:()=>false}; }
+    if(!wSnap.exists()){
+      await signOut(auth);
+      const el=document.getElementById('auth-error');
+      if(el){el.textContent='⛔ Acesso negado: '+user.email+' não está autorizado. Solicite acesso ao administrador.';el.style.display='block';}
+      return;
+    }
+    const ud=wSnap.data();
+    window._curUser={email:user.email,name:user.displayName||ud.name,photo:user.photoURL,role:ud.role||'viewer'};
+    document.getElementById('login-screen').style.display='none';
+    document.getElementById('app-root').style.display='flex';
+    if(window.initApp) window.initApp();
+  }else{
+    document.getElementById('login-screen').style.display='flex';
+    document.getElementById('app-root').style.display='none';
+    window._curUser=null;
+  }
+});
+</script>
 <style>
 /* ─────────────────────────────────────────
    TOKENS
@@ -687,6 +828,23 @@ select option{background:var(--s2)}
 </style>
 </head>
 <body>
+<!-- LOGIN SCREEN -->
+<div id="login-screen" style="display:flex;position:fixed;inset:0;z-index:9999;background:#07080d;align-items:center;justify-content:center">
+  <div style="text-align:center;max-width:400px;padding:44px 36px;background:#0f111c;border:1px solid #1a1f30;border-radius:20px;box-shadow:0 24px 64px rgba(0,0,0,.7)">
+    <div style="width:64px;height:64px;border-radius:16px;background:linear-gradient(135deg,#e9b84b,#c47828);display:flex;align-items:center;justify-content:center;font-size:30px;margin:0 auto 20px;box-shadow:0 4px 20px rgba(233,184,75,.35)">🔍</div>
+    <div style="font-family:'Syne',sans-serif;font-size:26px;font-weight:800;margin-bottom:4px">Discovery Tool</div>
+    <div style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:3px;color:#3e4769;margin-bottom:22px">v4.0 · ACESSO RESTRITO</div>
+    <div style="color:#8892b5;font-size:13px;line-height:1.7;margin-bottom:28px">Apenas usuários autorizados podem acessar.<br>Entre com o e-mail Google cadastrado pelo administrador.</div>
+    <button onclick="doGoogleLogin()" style="display:inline-flex;align-items:center;gap:12px;padding:14px 28px;background:#fff;border:none;border-radius:10px;font-family:'Syne',sans-serif;font-weight:700;font-size:14px;color:#1a1a2e;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.35);transition:transform .15s" onmouseover="this.style.transform='translateY(-1px)'" onmouseout="this.style.transform=''">
+      <svg width="20" height="20" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.47 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+      Entrar com Google
+    </button>
+    <div id="auth-error" style="display:none;margin-top:16px;padding:10px 14px;background:rgba(251,113,133,.1);border:1px solid rgba(251,113,133,.3);border-radius:8px;color:#fb7185;font-size:12px;font-family:'JetBrains Mono',monospace;line-height:1.5"></div>
+    <div style="margin-top:18px;color:#3e4769;font-size:11px;font-family:'JetBrains Mono',monospace">Solicite acesso ao administrador do sistema</div>
+  </div>
+</div>
+<!-- APP ROOT -->
+<div id="app-root" style="display:none;width:100%;height:100%">
 <div class="app">
 
 <!-- ══════════════ SIDEBAR ══════════════ -->
@@ -707,10 +865,26 @@ select option{background:var(--s2)}
     <div class="sb-grp">Recursos</div>
     <div class="sb-link" id="nl-templates" onclick="nav('templates')"><span class="ico">📋</span> Templates</div>
     <div class="sb-link" id="nl-help" onclick="nav('help')"><span class="ico">❓</span> Ajuda & Glossário</div>
+    <div class="sb-grp">Sistema</div>
+    <div class="sb-link" id="nl-settings" onclick="nav('settings')"><span class="ico">⚙️</span> Configurações</div>
+    <div class="sb-link" id="nl-access" onclick="nav('access')"><span class="ico">🔐</span> Acesso & Usuários</div>
   </nav>
+  <!-- user badge -->
+  <div id="sb-user-badge" style="margin:4px 10px 4px;padding:9px 11px;background:var(--s2);border:1px solid var(--b0);border-radius:var(--r);display:flex;align-items:center;gap:8px;flex-shrink:0">
+    <div id="sb-user-photo" style="width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,var(--gold),#c47828);display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;overflow:hidden">🔱</div>
+    <div style="min-width:0;flex:1">
+      <div id="sb-user-name" style="font-family:'Syne',sans-serif;font-size:11px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">—</div>
+      <div id="sb-role-label" style="font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--t3);letter-spacing:.8px">Carregando...</div>
+    </div>
+  </div>
+  <!-- toolbar buttons -->
+  <div style="display:flex;gap:5px;padding:0 10px 8px;flex-shrink:0">
+    <button onclick="location.reload()" class="btn btn-ghost btn-sm" style="flex:1;font-size:10px;padding:6px 8px">🔄 Atualizar</button>
+    <button onclick="doSignOut&&doSignOut()" class="btn btn-red btn-sm" style="flex:1;font-size:10px;padding:6px 8px">→ Sair</button>
+  </div>
   <div class="sb-foot">
-    <div>Discovery Tool © 2025</div>
-    <div style="margin-top:2px">Dados salvos localmente</div>
+    <div id="sb-footer-txt">Discovery Tool © 2025</div>
+    <div style="margin-top:2px">Firebase · Tempo real</div>
   </div>
 </aside>
 
@@ -877,6 +1051,233 @@ select option{background:var(--s2)}
     </div>
   </div>
 </div>
+
+<!-- ──── SETTINGS ──── -->
+<div class="page" id="page-settings">
+  <div class="ph">
+    <div class="ph-eye">Configurações</div>
+    <div class="ph-h">Configurações do Sistema</div>
+    <div class="ph-sub">Personalize aparência, listas de opções e identidade. <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--gold)">🔱 Zeus</span> tem acesso total a tudo.</div>
+    <div class="ph-row" id="settings-ph-row" style="display:none">
+      <button class="btn btn-red btn-sm" onclick="window.fbClearAll&&window.fbClearAll()">🗑 Limpar Banco</button>
+      <button class="btn btn-ghost btn-sm" onclick="location.reload()">🔄 Atualizar Página</button>
+    </div>
+  </div>
+  <div style="padding:24px 32px;flex:1;overflow-y:auto">
+    <div id="settings-lock" style="display:none;text-align:center;padding:60px 20px">
+      <div style="font-size:52px;margin-bottom:16px">🔒</div>
+      <div class="syne fw7" style="font-size:20px;margin-bottom:8px">Acesso Restrito</div>
+      <div class="txt-muted xs" style="margin-bottom:20px">Apenas <strong>Zeus</strong> e <strong>Admin</strong> acessam as configurações.</div>
+      <button class="btn btn-gold" onclick="nav('home')">← Voltar ao Dashboard</button>
+    </div>
+    <div id="settings-content">
+
+      <!-- ── APPEARANCE (ZEUS ONLY) ── -->
+      <div id="section-appearance">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+          <div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:800">🎨 Aparência</div>
+          <span class="badge b-draft" style="font-size:8px">ZEUS ONLY</span>
+        </div>
+        <div class="card">
+          <div class="card-h"><span class="card-ico">🎨</span>Cores do Sistema</div>
+          <div class="fgrid">
+            <div class="fg">
+              <label>Cor de Destaque (Accent)</label>
+              <div style="display:flex;gap:8px;align-items:center">
+                <input type="color" id="cfg-accent" value="#e9b84b" style="width:42px;height:36px;padding:2px;cursor:pointer;border-radius:6px;flex-shrink:0" oninput="previewTheme()">
+                <input id="cfg-accent-hex" value="#e9b84b" style="flex:1;font-family:'JetBrains Mono',monospace;font-size:12px" placeholder="#e9b84b" oninput="hexSync('accent')">
+              </div>
+            </div>
+            <div class="fg">
+              <label>Cor Azul / Secundária</label>
+              <div style="display:flex;gap:8px;align-items:center">
+                <input type="color" id="cfg-blue" value="#5b9cf6" style="width:42px;height:36px;padding:2px;cursor:pointer;border-radius:6px;flex-shrink:0" oninput="previewTheme()">
+                <input id="cfg-blue-hex" value="#5b9cf6" style="flex:1;font-family:'JetBrains Mono',monospace;font-size:12px" oninput="hexSync('blue')">
+              </div>
+            </div>
+            <div class="fg">
+              <label>Fundo (Background)</label>
+              <div style="display:flex;gap:8px;align-items:center">
+                <input type="color" id="cfg-bg" value="#080a12" style="width:42px;height:36px;padding:2px;cursor:pointer;border-radius:6px;flex-shrink:0" oninput="previewTheme()">
+                <input id="cfg-bg-hex" value="#080a12" style="flex:1;font-family:'JetBrains Mono',monospace;font-size:12px" oninput="hexSync('bg')">
+              </div>
+            </div>
+            <div class="fg">
+              <label>Cor da Sidebar</label>
+              <div style="display:flex;gap:8px;align-items:center">
+                <input type="color" id="cfg-s0" value="#0b0d16" style="width:42px;height:36px;padding:2px;cursor:pointer;border-radius:6px;flex-shrink:0" oninput="previewTheme()">
+                <input id="cfg-s0-hex" value="#0b0d16" style="flex:1;font-family:'JetBrains Mono',monospace;font-size:12px" oninput="hexSync('s0')">
+              </div>
+            </div>
+          </div>
+          <div class="fgrid">
+            <div class="fg">
+              <label>Fonte dos Títulos</label>
+              <select id="cfg-font-title" onchange="previewTheme()">
+                <option value="Syne">Syne (padrão)</option>
+                <option value="Playfair Display">Playfair Display</option>
+                <option value="Georgia">Georgia</option>
+                <option value="Impact">Impact</option>
+                <option value="Trebuchet MS">Trebuchet MS</option>
+              </select>
+            </div>
+            <div class="fg">
+              <label>Fonte do Corpo</label>
+              <select id="cfg-font-body" onchange="previewTheme()">
+                <option value="DM Sans">DM Sans (padrão)</option>
+                <option value="Georgia">Georgia</option>
+                <option value="Verdana">Verdana</option>
+                <option value="system-ui">System UI</option>
+              </select>
+            </div>
+            <div class="fg">
+              <label>Tamanho Base</label>
+              <select id="cfg-font-size" onchange="previewTheme()">
+                <option value="13px">13px (compacto)</option>
+                <option value="14px" selected>14px (padrão)</option>
+                <option value="15px">15px (confortável)</option>
+                <option value="16px">16px (grande)</option>
+              </select>
+            </div>
+            <div class="fg">
+              <label>Raio dos Cards</label>
+              <select id="cfg-radius" onchange="previewTheme()">
+                <option value="4px">4px</option>
+                <option value="8px">8px</option>
+                <option value="14px" selected>14px (padrão)</option>
+                <option value="22px">22px (arredondado)</option>
+              </select>
+            </div>
+          </div>
+          <div class="fg" style="margin-bottom:0">
+            <label>Temas Prontos</label>
+            <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:6px">
+              <button class="btn btn-ghost btn-xs" onclick="applyPreset('default')">⭐ Padrão</button>
+              <button class="btn btn-ghost btn-xs" onclick="applyPreset('ocean')">🌊 Ocean</button>
+              <button class="btn btn-ghost btn-xs" onclick="applyPreset('emerald')">💚 Emerald</button>
+              <button class="btn btn-ghost btn-xs" onclick="applyPreset('sunset')">🌅 Sunset</button>
+              <button class="btn btn-ghost btn-xs" onclick="applyPreset('lavender')">💜 Lavender</button>
+              <button class="btn btn-ghost btn-xs" onclick="applyPreset('light')">☀️ Light</button>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:14px">
+            <button class="btn btn-gold btn-sm" onclick="saveTheme()">💾 Salvar Tema</button>
+            <button class="btn btn-ghost btn-sm" onclick="resetTheme()">↺ Restaurar Padrão</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-h"><span class="card-ico">✏️</span>Nome & Identidade Visual</div>
+          <div class="fgrid">
+            <div class="fg"><label>Nome do Sistema</label><input id="cfg-sysname" value="Discovery Tool"></div>
+            <div class="fg"><label>Ícone (emoji)</label><input id="cfg-sysicon" value="🔍" style="font-size:20px"></div>
+            <div class="fg"><label>Versão exibida</label><input id="cfg-sysver" value="v4.0"></div>
+            <div class="fg"><label>Texto do rodapé</label><input id="cfg-footer" placeholder="Discovery Tool © 2025"></div>
+          </div>
+          <button class="btn btn-gold btn-sm" onclick="saveBranding()">💾 Salvar Identidade</button>
+        </div>
+      </div>
+
+      <!-- ── LIST EDITOR (ZEUS + ADMIN) ── -->
+      <div style="margin-top:6px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+          <div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:800">📋 Editor de Listas</div>
+          <span class="badge b-wip" style="font-size:8px">ZEUS + ADMIN</span>
+        </div>
+        <div class="card">
+          <div class="card-h"><span class="card-ico">📋</span>Edite, acrescente ou exclua opções de cada lista usada no wizard</div>
+          <div id="list-cat-tabs" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:18px"></div>
+          <div id="list-editor-area"></div>
+        </div>
+      </div>
+
+    </div><!-- /settings-content -->
+  </div>
+</div>
+
+<!-- ──── ACCESS ──── -->
+<div class="page" id="page-access">
+  <div class="ph">
+    <div class="ph-eye">Acesso & Usuários</div>
+    <div class="ph-h">Whitelist & Níveis de Acesso</div>
+    <div class="ph-sub">Gerencie quem pode entrar no sistema e com qual nível de permissão.</div>
+    <div class="ph-row">
+      <button class="btn btn-gold" id="btn-add-user" onclick="openNewUser()">+ Novo Usuário</button>
+    </div>
+  </div>
+  <div style="padding:24px 32px;flex:1;overflow-y:auto">
+    <!-- Role cards -->
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px">
+      <div style="background:rgba(233,184,75,.05);border:1px solid rgba(233,184,75,.3);border-radius:var(--r3);padding:18px">
+        <div style="font-size:28px;margin-bottom:8px">🔱</div>
+        <div class="syne fw7" style="color:var(--gold);font-size:15px;margin-bottom:5px">Zeus</div>
+        <div class="xs txt-muted" style="line-height:1.65">Acesso total. Edita cores, fontes, layout, listas, usuários. Zero restrições.</div>
+      </div>
+      <div style="background:rgba(167,139,250,.05);border:1px solid rgba(167,139,250,.25);border-radius:var(--r3);padding:18px">
+        <div style="font-size:28px;margin-bottom:8px">👑</div>
+        <div class="syne fw7" style="color:var(--purple);font-size:15px;margin-bottom:5px">Admin</div>
+        <div class="xs txt-muted" style="line-height:1.65">Cria/edita projetos, reuniões, empresas, listas e usuários. Não altera visual.</div>
+      </div>
+      <div style="background:rgba(91,156,246,.05);border:1px solid rgba(91,156,246,.25);border-radius:var(--r3);padding:18px">
+        <div style="font-size:28px;margin-bottom:8px">📝</div>
+        <div class="syne fw7" style="color:var(--blue);font-size:15px;margin-bottom:5px">Editor</div>
+        <div class="xs txt-muted" style="line-height:1.65">Preenche e edita projetos liberados. Registra reuniões. Não cria projetos novos.</div>
+      </div>
+      <div style="background:rgba(54,211,153,.04);border:1px solid rgba(54,211,153,.2);border-radius:var(--r3);padding:18px">
+        <div style="font-size:28px;margin-bottom:8px">👁</div>
+        <div class="syne fw7" style="color:var(--green);font-size:15px;margin-bottom:5px">Viewer</div>
+        <div class="xs txt-muted" style="line-height:1.65">Visualiza projetos e reuniões liberados. Nenhuma edição permitida.</div>
+      </div>
+    </div>
+    <!-- Permission matrix -->
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-h"><span class="card-ico">📊</span>Matriz de Permissões</div>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead><tr>
+            <th style="text-align:left;padding:9px 12px;background:var(--s2);font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;border:1px solid var(--b0)">Funcionalidade</th>
+            <th style="padding:9px;background:var(--s2);border:1px solid var(--b0);color:var(--gold);white-space:nowrap">🔱 Zeus</th>
+            <th style="padding:9px;background:var(--s2);border:1px solid var(--b0);color:var(--purple);white-space:nowrap">👑 Admin</th>
+            <th style="padding:9px;background:var(--s2);border:1px solid var(--b0);color:var(--blue);white-space:nowrap">📝 Editor</th>
+            <th style="padding:9px;background:var(--s2);border:1px solid var(--b0);color:var(--green);white-space:nowrap">👁 Viewer</th>
+          </tr></thead>
+          <tbody id="perm-matrix"></tbody>
+        </table>
+      </div>
+    </div>
+    <!-- Users list -->
+    <div class="card">
+      <div class="card-h"><span class="card-ico">👥</span>Usuários Autorizados (Whitelist Firebase)</div>
+      <div id="users-list"><div class="empty" style="padding:20px"><div class="empty-ic">👥</div><div class="xs txt-muted">Carregando...</div></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ──── USER MODAL ──── -->
+<div class="ov" id="ov-user">
+  <div class="modal" style="max-width:480px">
+    <div class="mhd"><div class="mhd-t" id="m-user-t">Novo Usuário</div><button class="mcl" onclick="closeOv('ov-user')">✕</button></div>
+    <div class="mbd">
+      <div style="padding:11px 14px;background:var(--gold-d);border:1px solid rgba(233,184,75,.25);border-radius:var(--r);margin-bottom:16px;font-size:12px;color:var(--t2);line-height:1.6">
+        📧 O e-mail será adicionado à <strong>whitelist do Firebase</strong>. O usuário precisa fazer login com o Google usando exatamente esse e-mail.
+      </div>
+      <div class="fg"><label>Nome <span class="req">*</span></label><input id="u-name" placeholder="Ex: João Silva"></div>
+      <div class="fg"><label>E-mail Google <span class="req">*</span></label><input id="u-email" type="email" placeholder="Ex: joao@empresa.com"></div>
+      <div class="fg"><label>Nível de Acesso <span class="req">*</span></label>
+        <select id="u-role">
+          <option value="zeus">🔱 Zeus — Acesso total (cores, layout, tudo)</option>
+          <option value="admin">👑 Admin — Gerenciar projetos, listas e usuários</option>
+          <option value="editor">📝 Editor — Editar projetos liberados + reuniões</option>
+          <option value="viewer">👁 Viewer — Somente visualizar</option>
+        </select>
+      </div>
+    </div>
+    <div class="mft">
+      <button class="btn btn-ghost btn-sm" onclick="closeOv('ov-user')">Cancelar</button>
+      <button class="btn btn-gold btn-sm" onclick="window.saveUser&&window.saveUser()">Salvar na Whitelist</button>
+    </div>
+  </div>
+</div>
+
 
 <!-- ──── PROJECT DETAIL ──── -->
 <div class="page" id="page-detail">
@@ -1217,13 +1618,266 @@ select option{background:var(--s2)}
 // ═══════════════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════════════
-let S = { companies:[], projects:[], meetings:[], curId:null, editId:null };
+let S = { companies:[], projects:[], meetings:[], curId:null, editId:null, customLists:{} };
 let wz = {}, wzStep = 0;
 const WZ_TOT = 9;
 
-function loadS(){ try{ const s=localStorage.getItem('dt_v3'); if(s) S=JSON.parse(s); }catch(e){} }
-function saveS(){ localStorage.setItem('dt_v3',JSON.stringify(S)) }
-loadS();
+// ── Firebase persistence (replaces localStorage) ──
+async function saveS(col, id, data){
+  if(window.fbSave) await window.fbSave(col, id, data);
+}
+async function delS(col, id){
+  if(window.fbDel) await window.fbDel(col, id);
+}
+
+// ── Access helpers ──
+function curRole(){ return window._curUser?.role||'viewer'; }
+function can(action){
+  const r=curRole();
+  const m={edit_visual:['zeus'],manage_lists:['zeus','admin'],manage_users:['zeus','admin'],
+    create_project:['zeus','admin'],edit_project:['zeus','admin','editor'],
+    delete_project:['zeus','admin'],manage_meetings:['zeus','admin','editor'],
+    view:['zeus','admin','editor','viewer'],export:['zeus','admin','editor','viewer'],
+    settings:['zeus','admin'],clear_db:['zeus']};
+  return (m[action]||[]).includes(r);
+}
+
+// ── Default lists (editable) ──
+const DEFAULT_LISTS = {
+  backend:    {label:'⚙️ Backend',        items:['Python','Node.js','Java','C# .NET','PHP','Go','Rust','R']},
+  db:         {label:'🗄️ Banco de Dados',  items:['PostgreSQL','MySQL','SQL Server','MongoDB','BigQuery','Snowflake','SQLite','Redis']},
+  scheduler:  {label:'🔄 Scheduler',       items:['Airflow','Cron','AWS Lambda','Cloud Run','n8n','Celery','GitHub Actions','Azure Fn']},
+  report:     {label:'📊 BI / Visualização',items:['Power BI','Metabase','Grafana','Superset','Looker','Email/SMTP','PDF custom','Sheets']},
+  sourceTypes:{label:'📡 Tipos de Fonte',  items:['Banco SQL','Excel/Sheets','API REST','ERP (SAP/TOTVS)','TMS','FTP/SFTP','Data Warehouse','CSV','Webhook']},
+  lgpd:       {label:'🔒 LGPD',            items:['Sim — dados pessoais','Sim — financeiros','Dados operacionais','Não aplicável']},
+  teamSize:   {label:'👥 Tamanho da Equipe',items:['1 dev (solo)','2 devs','3–5 devs','Squad 5+','10+ (múltiplos squads)']},
+  personas:   {label:'🧑 Usuários Finais', items:['Analista','Gerente','Diretoria','TI / DevOps','Financeiro','Campo / Operações','Cliente Externo']},
+  techLevel:  {label:'🧠 Nível Técnico',   items:['Não técnico','Semi-técnico','Técnico','Dev / Engenheiro']},
+  consumption:{label:'📬 Como Consome',    items:['Email automático','Dashboard Web','WhatsApp/Teams','PDF','Excel/Sheets','API','Slack','Mobile App']},
+  features:   {label:'🚀 MVP Features',    items:['ETL/Extração','Transformação','Cálculo KPIs','Agendamento','Envio email','Dashboard','Alertas','Histórico','Log execução','Retry falha','Comparativo','Exportar PDF']},
+  kpis:       {label:'📊 KPIs Relatório',  items:['Total viagens','On-time %','Custo médio','Custo/KM','KM total','Utilização frota','Taxa ocorrências','SLA entrega','Combustível','NPS','Ranking motoristas','Top rotas']},
+  risks:      {label:'⚠️ Riscos',          items:['Dados inconsistentes','API sem documentação','Sem acesso prod','Mudança escopo','Dependência terceiro','Sem homologação','Volume alto','Prazo apertado']},
+};
+function getLists(){ return Object.assign({}, DEFAULT_LISTS, S.customLists||{}); }
+function getItems(key){ const L=getLists(); return L[key]?.items||DEFAULT_LISTS[key]?.items||[]; }
+
+// ── initApp called after auth ──
+window.initApp = async function(){
+  // load all collections from Firebase
+  S.projects  = await window.fbGetAll('projects');
+  S.companies = await window.fbGetAll('companies');
+  S.meetings  = await window.fbGetAll('meetings');
+  // load customLists
+  const cl = await window.fbGetAll('customLists');
+  cl.forEach(doc => { S.customLists[doc.id] = doc; });
+  // load theme/branding
+  if(window.fbGetAll){
+    const cfg = await window.fbGetAll('settings');
+    cfg.forEach(d => {
+      if(d.id==='theme')   loadThemeData(d);
+      if(d.id==='branding') loadBrandingData(d);
+    });
+  }
+  // real-time listeners
+  window.fbWatch('projects',  docs=>{ S.projects=docs;  renderProjects(); renderHome(); });
+  window.fbWatch('companies', docs=>{ S.companies=docs; renderCos(); });
+  window.fbWatch('meetings',  docs=>{ S.meetings=docs;  renderMeetings(); renderHome(); document.getElementById('pill-meet').textContent=docs.length; });
+  // update UI
+  updateSbUser();
+  applyAccessRestrictions();
+  renderHome();
+  document.getElementById('pill-proj').textContent = S.projects.length;
+  document.getElementById('pill-meet').textContent = S.meetings.length;
+};
+
+function updateSbUser(){
+  const u=window._curUser; if(!u) return;
+  const ROLE_META={zeus:{icon:'🔱',label:'Zeus',color:'var(--gold)',desc:'Acesso Total'},admin:{icon:'👑',label:'Admin',color:'var(--purple)',desc:'Gerenciar'},editor:{icon:'📝',label:'Editor',color:'var(--blue)',desc:'Editar'},viewer:{icon:'👁',label:'Viewer',color:'var(--green)',desc:'Visualizar'}};
+  const m=ROLE_META[u.role]||ROLE_META.viewer;
+  const photoEl=document.getElementById('sb-user-photo');
+  if(photoEl){ if(u.photo){ photoEl.innerHTML=`<img src="${u.photo}" style="width:100%;height:100%;object-fit:cover">`; } else { photoEl.textContent=m.icon; } }
+  const nameEl=document.getElementById('sb-user-name'); if(nameEl) nameEl.textContent=u.name||u.email||'—';
+  const roleEl=document.getElementById('sb-role-label'); if(roleEl) roleEl.textContent=`${m.label.toUpperCase()} · ${m.desc}`;
+}
+
+function applyAccessRestrictions(){
+  const r=curRole();
+  const isZeus=r==='zeus', isAdmin=['zeus','admin'].includes(r), canCreate=can('create_project');
+  // hide new project btn for viewer/editor
+  document.querySelectorAll('[onclick*="openNewProject"]').forEach(b=>{ b.style.display=canCreate?'':'none'; });
+  // clear db btn only for zeus
+  const clearBtn=document.getElementById('settings-ph-row'); if(clearBtn) clearBtn.style.display=isZeus?'flex':'none';
+  // settings sections visibility
+  const appSec=document.getElementById('section-appearance'); if(appSec) appSec.style.display=isZeus?'block':'none';
+  const sc=document.getElementById('settings-content'), sl=document.getElementById('settings-lock');
+  if(sc&&sl){ sc.style.display=isAdmin?'block':'none'; sl.style.display=isAdmin?'none':'block'; }
+  // add user btn
+  const abu=document.getElementById('btn-add-user'); if(abu) abu.style.display=isAdmin?'':'none';
+}
+
+// ── Permission matrix render ──
+function renderPermMatrix(){
+  const tb=document.getElementById('perm-matrix'); if(!tb) return;
+  const rows=[
+    ['Editar cores, fontes e layout',       true,false,false,false],
+    ['Gerenciar listas de opções',           true,true, false,false],
+    ['Gerenciar usuários (whitelist)',        true,true, false,false],
+    ['Criar novos projetos',                 true,true, false,false],
+    ['Editar / apagar projetos',             true,true, true, false],
+    ['Criar e editar reuniões',              true,true, true, false],
+    ['Visualizar projetos',                  true,true, true, true ],
+    ['Exportar PDF',                         true,true, true, true ],
+    ['Limpar banco de dados',               true,false,false,false],
+  ];
+  const ck=ok=>ok?`<td style="text-align:center;border:1px solid var(--b0);color:var(--green)">✓</td>`:`<td style="text-align:center;border:1px solid var(--b0);color:var(--t3)">—</td>`;
+  tb.innerHTML=rows.map(([l,...p])=>`<tr><td style="padding:7px 12px;border:1px solid var(--b0);color:var(--t2);font-size:12px">${l}</td>${p.map(ck).join('')}</tr>`).join('');
+}
+
+// ── LIST EDITOR ──
+let curListKey='backend';
+function renderListCatTabs(){
+  const c=document.getElementById('list-cat-tabs'); if(!c) return;
+  const L=getLists();
+  c.innerHTML=Object.entries(L).map(([k,v])=>`<div style="padding:5px 11px;border:1px solid ${k===curListKey?'var(--gold)':'var(--b0)'};border-radius:var(--r);background:${k===curListKey?'var(--gold-d)':'var(--s2)'};color:${k===curListKey?'var(--gold)':'var(--t2)'};font-family:'JetBrains Mono',monospace;font-size:10px;cursor:pointer;transition:all .13s" onclick="selectListCat('${k}')">${v.label}</div>`).join('');
+  renderListEditor();
+}
+function selectListCat(key){ curListKey=key; renderListCatTabs(); }
+function renderListEditor(){
+  const c=document.getElementById('list-editor-area'); if(!c) return;
+  const L=getLists(), list=L[curListKey]; if(!list) return;
+  c.innerHTML=`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div class="syne fw7" style="font-size:14px">${list.label}</div>
+      <button class="btn btn-ghost btn-xs" onclick="resetList('${curListKey}')">↺ Restaurar padrão</button>
+    </div>
+    <div id="list-items-cont">
+      ${list.items.map((item,i)=>`
+        <div style="display:flex;align-items:center;gap:7px;padding:5px 0;border-bottom:1px solid var(--b0)">
+          <span style="color:var(--t3);font-family:'JetBrains Mono',monospace;font-size:9px;width:18px;text-align:right;flex-shrink:0">${i+1}</span>
+          <input value="${esc(item)}" style="flex:1;font-size:12px;padding:6px 10px;background:var(--s2);border:1px solid var(--b0);border-radius:var(--r);color:var(--t1);font-family:'DM Sans',sans-serif;outline:none" onchange="updateListItem('${curListKey}',${i},this.value)">
+          <button class="btn btn-ghost btn-xs btn-ic" onclick="moveItem('${curListKey}',${i},-1)" ${i===0?'disabled':''} title="Subir">↑</button>
+          <button class="btn btn-ghost btn-xs btn-ic" onclick="moveItem('${curListKey}',${i},1)"  ${i===list.items.length-1?'disabled':''} title="Descer">↓</button>
+          <button class="btn btn-red btn-xs btn-ic" onclick="removeItem('${curListKey}',${i})" title="Excluir">✕</button>
+        </div>`).join('')}
+    </div>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <input id="new-list-item" placeholder="Nova opção..." style="flex:1;font-size:13px;padding:7px 11px;background:var(--s2);border:1px solid var(--b0);border-radius:var(--r);color:var(--t1);font-family:'DM Sans',sans-serif;outline:none" onkeydown="if(event.key==='Enter')addItem('${curListKey}')">
+      <button class="btn btn-gold btn-sm" onclick="addItem('${curListKey}')">+ Adicionar</button>
+    </div>
+    <div style="margin-top:10px;font-size:10px;color:var(--t3);font-family:'JetBrains Mono',monospace">${list.items.length} opções · Salvas no Firebase e refletem no wizard</div>`;
+}
+function updateListItem(key,idx,val){
+  const L=getLists(); if(!S.customLists[key]) S.customLists[key]={...DEFAULT_LISTS[key]};
+  S.customLists[key].items[idx]=val;
+  saveS('customLists',key,{label:S.customLists[key].label,items:S.customLists[key].items});
+}
+function removeItem(key,idx){
+  const L=getLists(); if(!S.customLists[key]) S.customLists[key]={...DEFAULT_LISTS[key],items:[...DEFAULT_LISTS[key].items]};
+  S.customLists[key].items.splice(idx,1);
+  saveS('customLists',key,{label:S.customLists[key].label,items:S.customLists[key].items});
+  renderListEditor();
+}
+function moveItem(key,idx,dir){
+  const L=getLists(); if(!S.customLists[key]) S.customLists[key]={...DEFAULT_LISTS[key],items:[...DEFAULT_LISTS[key].items]};
+  const items=S.customLists[key].items, ni=idx+dir;
+  if(ni<0||ni>=items.length) return;
+  [items[idx],items[ni]]=[items[ni],items[idx]];
+  saveS('customLists',key,{label:S.customLists[key].label,items});
+  renderListEditor();
+}
+function addItem(key){
+  const inp=document.getElementById('new-list-item'); if(!inp||!inp.value.trim()) return;
+  const L=getLists(); if(!S.customLists[key]) S.customLists[key]={...DEFAULT_LISTS[key],items:[...DEFAULT_LISTS[key].items]};
+  S.customLists[key].items.push(inp.value.trim());
+  saveS('customLists',key,{label:S.customLists[key].label,items:S.customLists[key].items});
+  inp.value=''; renderListEditor();
+}
+function resetList(key){
+  if(!confirm('Restaurar lista ao padrão original?')) return;
+  delete S.customLists[key];
+  window.fbDel&&window.fbDel('customLists',key);
+  renderListEditor(); toast('Lista restaurada!');
+}
+
+// ── THEME SYSTEM ──
+function previewTheme(){
+  const v=id=>document.getElementById(id)?.value||'';
+  const accent=v('cfg-accent')||'#e9b84b', blue=v('cfg-blue')||'#5b9cf6';
+  const bg=v('cfg-bg')||'#080a12', s0=v('cfg-s0')||'#0b0d16';
+  const fontT=v('cfg-font-title')||'Syne', fontB=v('cfg-font-body')||'DM Sans';
+  const fs=v('cfg-font-size')||'14px', rad=v('cfg-radius')||'14px';
+  const r=document.documentElement;
+  r.style.setProperty('--gold',accent);
+  r.style.setProperty('--gold-d',h2r(accent,.1)); r.style.setProperty('--gold-g',h2r(accent,.22));
+  r.style.setProperty('--blue',blue); r.style.setProperty('--blue-d',h2r(blue,.1));
+  r.style.setProperty('--bg',bg); r.style.setProperty('--s0',s0);
+  r.style.setProperty('--r3',rad);
+  let st=document.getElementById('theme-dyn');
+  if(!st){st=document.createElement('style');st.id='theme-dyn';document.head.appendChild(st);}
+  st.textContent=`.syne,.ph-h,.mhd-t,.card-h,.pc-name,.stat-val,.sb-name{font-family:'${fontT}',sans-serif!important}body{font-size:${fs}!important;font-family:'${fontB}',sans-serif!important}`;
+}
+function hexSync(key){
+  const hex=document.getElementById(`cfg-${key}-hex`);
+  const col=document.getElementById(`cfg-${key}`);
+  if(hex&&col&&/^#[0-9a-fA-F]{6}$/.test(hex.value)){col.value=hex.value;previewTheme();}
+}
+function h2r(hex,a){
+  const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
+  return `rgba(${r},${g},${b},${a})`;
+}
+function saveTheme(){
+  const v=id=>document.getElementById(id)?.value||'';
+  const data={accent:v('cfg-accent'),blue:v('cfg-blue'),bg:v('cfg-bg'),s0:v('cfg-s0'),
+    fontT:v('cfg-font-title'),fontB:v('cfg-font-body'),fs:v('cfg-font-size'),rad:v('cfg-radius')};
+  saveS('settings','theme',data); toast('Tema salvo!');
+}
+function loadThemeData(d){
+  const sv=(id,v)=>{const e=document.getElementById(id);if(e&&v)e.value=v;};
+  sv('cfg-accent',d.accent);sv('cfg-blue',d.blue);sv('cfg-bg',d.bg);sv('cfg-s0',d.s0);
+  sv('cfg-font-title',d.fontT);sv('cfg-font-body',d.fontB);sv('cfg-font-size',d.fs);sv('cfg-radius',d.rad);
+  previewTheme();
+}
+function resetTheme(){
+  if(!confirm('Restaurar tema padrão?')) return;
+  ['cfg-accent','cfg-blue','cfg-bg','cfg-s0'].forEach(id=>{
+    const e=document.getElementById(id); const def={'cfg-accent':'#e9b84b','cfg-blue':'#5b9cf6','cfg-bg':'#080a12','cfg-s0':'#0b0d16'};
+    if(e) e.value=def[id];
+  });
+  const r=document.documentElement;
+  ['--gold','--blue','--bg','--s0','--r3','--gold-d','--gold-g','--blue-d'].forEach(v=>r.style.removeProperty(v));
+  const st=document.getElementById('theme-dyn'); if(st) st.textContent='';
+  window.fbDel&&window.fbDel('settings','theme'); toast('Tema restaurado!');
+}
+const PRESETS={
+  default:{accent:'#e9b84b',blue:'#5b9cf6',bg:'#080a12',s0:'#0b0d16'},
+  ocean:  {accent:'#22d3ee',blue:'#818cf8',bg:'#071520',s0:'#091c2c'},
+  emerald:{accent:'#36d399',blue:'#34d399',bg:'#071510',s0:'#091e14'},
+  sunset: {accent:'#fb923c',blue:'#f43f5e',bg:'#120a07',s0:'#1c0f08'},
+  lavender:{accent:'#a78bfa',blue:'#c4b5fd',bg:'#0d0a18',s0:'#120e22'},
+  light:  {accent:'#c47828',blue:'#2563eb',bg:'#f8f9fc',s0:'#eef0f7'},
+};
+function applyPreset(name){
+  const p=PRESETS[name]; if(!p) return;
+  const sv=(id,v)=>{const e=document.getElementById(id);if(e)e.value=v;};
+  sv('cfg-accent',p.accent);sv('cfg-blue',p.blue);sv('cfg-bg',p.bg);sv('cfg-s0',p.s0);
+  sv('cfg-accent-hex',p.accent);sv('cfg-blue-hex',p.blue);sv('cfg-bg-hex',p.bg);sv('cfg-s0-hex',p.s0);
+  previewTheme();
+}
+function saveBranding(){
+  const v=id=>document.getElementById(id)?.value||'';
+  const name=v('cfg-sysname')||'Discovery Tool', icon=v('cfg-sysicon')||'🔍';
+  const ver=v('cfg-sysver')||'v4.0', footer=v('cfg-footer');
+  saveS('settings','branding',{name,icon,ver,footer});
+  applyBrandingData({name,icon,ver,footer}); toast('Identidade salva!');
+}
+function loadBrandingData(d){ applyBrandingData(d); const sv=(id,v)=>{const e=document.getElementById(id);if(e&&v)e.value=v;}; sv('cfg-sysname',d.name);sv('cfg-sysicon',d.icon);sv('cfg-sysver',d.ver);sv('cfg-footer',d.footer); }
+function applyBrandingData(d){
+  const gem=document.querySelector('.sb-gem'); if(gem&&d.icon) gem.textContent=d.icon;
+  const nm=document.querySelector('.sb-name'); if(nm&&d.name) nm.textContent=d.name;
+  const vr=document.querySelector('.sb-ver'); if(vr&&d.ver) vr.textContent=`${(d.name||'Discovery').split(' ')[0]} · ${d.ver}`;
+  const ft=document.getElementById('sb-footer-txt'); if(ft&&d.footer) ft.textContent=d.footer;
+  if(d.name) document.title=d.name+' · v4';
+}
 
 // ═══════════════════════════════════════════════════
 // NAV
@@ -1231,13 +1885,16 @@ loadS();
 function nav(p){
   document.querySelectorAll('.page').forEach(x=>x.classList.remove('on'));
   document.querySelectorAll('.sb-link').forEach(x=>x.classList.remove('on'));
-  document.getElementById('page-'+p).classList.add('on');
+  const pg=document.getElementById('page-'+p);
+  if(pg) pg.classList.add('on');
   const nl=document.getElementById('nl-'+p);
   if(nl) nl.classList.add('on');
-  if(p==='home') renderHome();
-  if(p==='projects') renderProjects();
-  if(p==='meetings') renderMeetings();
+  if(p==='home')      renderHome();
+  if(p==='projects')  renderProjects();
+  if(p==='meetings')  renderMeetings();
   if(p==='companies') renderCos();
+  if(p==='settings'){ applyAccessRestrictions(); renderListCatTabs(); }
+  if(p==='access')  { renderPermMatrix(); window.renderUsers&&window.renderUsers(); }
 }
 
 function dTab(el,id){
@@ -1435,8 +2092,9 @@ function openProject(id){
 
 function delProj(id){
   if(!confirm('Apagar projeto?'))return;
+  delS('projects',id);
   S.projects=S.projects.filter(p=>p.id!==id);
-  saveS(); renderProjects(); renderHome();
+  renderProjects(); renderHome();
   toast('Projeto apagado');
 }
 
@@ -1555,11 +2213,16 @@ function saveMeeting(){
   };
   if(S._editMeetId){
     const i=S.meetings.findIndex(x=>x.id===S._editMeetId);
-    if(i!==-1) S.meetings[i]={...obj,id:S._editMeetId,createdAt:S.meetings[i].createdAt};
+    const meetData={...obj,id:S._editMeetId,createdAt:i!==-1?S.meetings[i].createdAt:Date.now()};
+    if(i!==-1) S.meetings[i]=meetData; else S.meetings.push(meetData);
+    saveS('meetings',S._editMeetId,meetData);
   } else {
-    S.meetings.push({...obj,id:uid(),createdAt:Date.now()});
+    const newId=uid();
+    const meetData={...obj,id:newId,createdAt:Date.now()};
+    S.meetings.push(meetData);
+    saveS('meetings',newId,meetData);
   }
-  saveS(); closeOv('ov-meet');
+  closeOv('ov-meet');
   renderMeetings(); renderHome();
   if(S.curId) renderDetailMeetings(S.curId);
   document.getElementById('pill-meet').textContent=S.meetings.length;
@@ -1568,8 +2231,9 @@ function saveMeeting(){
 
 function delMeeting(id){
   if(!confirm('Apagar reunião?'))return;
+  delS('meetings',id);
   S.meetings=S.meetings.filter(m=>m.id!==id);
-  saveS(); renderMeetings(); renderHome();
+  renderMeetings(); renderHome();
   if(S.curId) renderDetailMeetings(S.curId);
   toast('Reunião apagada');
 }
@@ -1620,18 +2284,23 @@ function saveCo(){
   const name=document.getElementById('co-name').value.trim();
   if(!name){alert('Nome obrigatório');return;}
   if(S._editCoId){
-    const c=S.companies.find(x=>x.id===S._editCoId);
-    if(c){c.name=name;c.sector=gv('co-sec');c.contact=gv('co-cnt');c.notes=gv('co-note');}
+    const co=S.companies.find(x=>x.id===S._editCoId);
+    if(co){co.name=name;co.sector=gv('co-sec');co.contact=gv('co-cnt');co.notes=gv('co-note');}
+    saveS('companies',S._editCoId,S.companies.find(x=>x.id===S._editCoId)||{});
   } else {
-    S.companies.push({id:uid(),name,sector:gv('co-sec'),contact:gv('co-cnt'),notes:gv('co-note')});
+    const newCoId=uid();
+    const coData={id:newCoId,name,sector:gv('co-sec'),contact:gv('co-cnt'),notes:gv('co-note')};
+    S.companies.push(coData);
+    saveS('companies',newCoId,coData);
   }
-  saveS(); closeOv('ov-co'); renderCos(); renderHome(); toast('Empresa salva!');
+  closeOv('ov-co'); renderCos(); renderHome(); toast('Empresa salva!');
 }
 function delCo(id){
   if(!confirm('Apagar empresa?'))return;
+  delS('companies',id);
   S.companies=S.companies.filter(c=>c.id!==id);
-  S.projects.forEach(p=>{if(p.companyId===id)p.companyId=null;});
-  saveS(); renderCos(); toast('Empresa apagada');
+  S.projects.forEach(p=>{if(p.companyId===id){p.companyId=null;saveS('projects',p.id,p);}});
+  renderCos(); toast('Empresa apagada');
 }
 
 // ═══════════════════════════════════════════════════
@@ -1764,7 +2433,7 @@ function saveLayers(){
     colMaps,transforms,filters,svJoins:gv('sv-joins'),
     aggs,goTable:gv('go-table'),goGran:gv('go-gran'),goConsumers:gv('go-consumers')
   };
-  p.updatedAt=Date.now(); saveS(); toast('Camadas salvas!');
+  p.updatedAt=Date.now(); saveS('projects',p.id,p); toast('Camadas salvas!');
 }
 
 // ═══════════════════════════════════════════════════
@@ -1824,10 +2493,11 @@ function saveTeam(){
   const perms={};
   S.projects.forEach(pr=>perms[pr.id]=lvl);
   p.teams.push({id:uid(),name:nm,members:gv('team-mb'),perms});
-  saveS(); closeOv('ov-team'); renderPerms(p); toast('Time adicionado!');
+  saveS('projects',p.id,p); closeOv('ov-team'); renderPerms(p); toast('Time adicionado!');
 }
 function savePerms(){
-  saveS(); toast('Permissões salvas!');
+  const p=S.projects.find(x=>x.id===S.curId); if(p) saveS('projects',p.id,p);
+  toast('Permissões salvas!');
 }
 
 // ═══════════════════════════════════════════════════
@@ -1869,7 +2539,7 @@ function wzHTML(s){
       <div class="fg"><label>Frequência Relatório</label><select id="wz-frq"><option value="">—</option><option>Diário</option><option>Semanal</option><option>Quinzenal</option><option>Mensal</option><option>Sob demanda</option></select></div>
       <div class="fg"><label>Tempo Atual Gasto</label><input id="wz-ts" placeholder="Ex: 4h / semana"></div>
       <div class="fg"><label>Deadline</label><input id="wz-dl" placeholder="Ex: 45 dias após kickoff"></div>
-      <div class="fg"><label>Tamanho da Equipe</label><select id="wz-tm"><option value="">—</option><option>1 dev</option><option>2 devs</option><option>3–5 devs</option><option>Squad 5+</option></select></div>
+      <div class="fg"><label>Tamanho da Equipe</label><select id="wz-tm"><option value="">—</option>'+getItems('teamSize').map(t=>`<option${wz.teamSize===t?' selected':''}>${esc(t)}</option>`).join('')+'</select></div>
       <div class="fg full"><label>Contexto Geral <span class="req">*</span></label><textarea id="wz-ctx" rows="3" placeholder="Descreva o cenário atual. Como o processo funciona hoje?"></textarea></div>
     </div>`;
     case 1:return`
@@ -1886,21 +2556,21 @@ function wzHTML(s){
       </div>
       <div class="fg"><label>Nível Técnico</label><select id="wz-tl"><option value="">—</option><option>Não técnico</option><option>Semi-técnico</option><option>Técnico</option></select></div>
       <div class="fg"><label>Como Consome o Relatório</label>
-        <div class="tags" id="wz-con">${['Email automático','Dashboard Web','WhatsApp/Teams','PDF','Excel/Sheets','API'].map(t=>`<div class="tag${(wz.consumption||[]).includes(t)?' on':''}" onclick="wzTag(this,'consumption')">${t}</div>`).join('')}</div>
+        <div class="tags" id="wz-con">${getItems('consumption').map(t=>`<div class="tag${(wz.consumption||[]).includes(t)?' on':''}" onclick="wzTag(this,'consumption')">${esc(t)}</div>`).join('')}</div>
       </div>`;
     case 3:return`
-      <div class="mb2"><label style="margin-bottom:6px">Backend</label><div class="tgrid">${[['🐍','Python'],['🟨','Node.js'],['☕','Java'],['💜','C# .NET'],['🐘','PHP'],['🦫','Go']].map(([i,t])=>`<div class="tc${(wz.stack?.backend||[]).includes(t)?' on':''}" onclick="wzTech(this,'backend','${t}')"><span class="ti">${i}</span>${t}</div>`).join('')}</div></div>
-      <div class="mb2"><label style="margin-bottom:6px">Banco de Dados</label><div class="tgrid">${[['🐘','PostgreSQL'],['🐬','MySQL'],['🔵','SQL Server'],['🍃','MongoDB'],['📊','BigQuery'],['❄️','Snowflake'],['📁','SQLite'],['🔴','Redis']].map(([i,t])=>`<div class="tc${(wz.stack?.db||[]).includes(t)?' on':''}" onclick="wzTech(this,'db','${t}')"><span class="ti">${i}</span>${t}</div>`).join('')}</div></div>
-      <div class="mb2"><label style="margin-bottom:6px">Scheduler</label><div class="tgrid">${[['🌊','Airflow'],['🕐','Cron'],['⚡','AWS Lambda'],['☁️','Cloud Run'],['🤖','n8n'],['📦','Celery'],['🔁','GitHub Actions'],['🔷','Azure Fn']].map(([i,t])=>`<div class="tc${(wz.stack?.scheduler||[]).includes(t)?' on':''}" onclick="wzTech(this,'scheduler','${t}')"><span class="ti">${i}</span>${t}</div>`).join('')}</div></div>
-      <div><label style="margin-bottom:6px">BI / Visualização</label><div class="tgrid">${[['📈','Power BI'],['📊','Metabase'],['🔍','Grafana'],['🟠','Superset'],['📋','Looker'],['📧','Email/SMTP'],['📄','PDF custom'],['📑','Sheets']].map(([i,t])=>`<div class="tc${(wz.stack?.report||[]).includes(t)?' on':''}" onclick="wzTech(this,'report','${t}')"><span class="ti">${i}</span>${t}</div>`).join('')}</div></div>`;
+      <div class="mb2"><label style="margin-bottom:6px">Backend</label><div class="tgrid">${getItems('backend').map(t=>`<div class="tc${(wz.stack?.backend||[]).includes(t)?' on':''}" onclick="wzTech(this,'backend','${esc(t)}')">${esc(t)}</div>`).join('')}</div></div>
+      <div class="mb2"><label style="margin-bottom:6px">Banco de Dados</label><div class="tgrid">${getItems('db').map(t=>`<div class="tc${(wz.stack?.db||[]).includes(t)?' on':''}" onclick="wzTech(this,'db','${esc(t)}')">${esc(t)}</div>`).join('')}</div></div>
+      <div class="mb2"><label style="margin-bottom:6px">Scheduler</label><div class="tgrid">${getItems('scheduler').map(t=>`<div class="tc${(wz.stack?.scheduler||[]).includes(t)?' on':''}" onclick="wzTech(this,'scheduler','${esc(t)}')">${esc(t)}</div>`).join('')}</div></div>
+      <div><label style="margin-bottom:6px">BI / Visualização</label><div class="tgrid">${getItems('report').map(t=>`<div class="tc${(wz.stack?.report||[]).includes(t)?' on':''}" onclick="wzTech(this,'report','${esc(t)}')">${esc(t)}</div>`).join('')}</div></div>`;
     case 4:return`
       <div class="fg"><label>Tipos de Fonte</label>
-        <div class="tags" id="wz-src">${['Banco SQL','Planilha Excel/Sheets','API REST','ERP (SAP/TOTVS)','TMS','FTP/SFTP','Data Warehouse','CSV','Webhook'].map(t=>`<div class="tag${(wz.sourceTypes||[]).includes(t)?' on':''}" onclick="wzTag(this,'sourceTypes')">${t}</div>`).join('')}</div>
+        <div class="tags" id="wz-src">${getItems('sourceTypes').map(t=>`<div class="tag${(wz.sourceTypes||[]).includes(t)?' on':''}" onclick="wzTag(this,'sourceTypes')">${esc(t)}</div>`).join('')}</div>
       </div>
       <div class="fg"><label>Descreva as Fontes</label><textarea id="wz-srcd" rows="4" placeholder="1. Banco PostgreSQL — tabelas: viagens, veiculos&#10;2. API TMS externo — OAuth2&#10;3. Planilha Google Sheets"></textarea></div>
       <div class="fgrid">
         <div class="fg"><label>Quem tem acesso?</label><input id="wz-dac" placeholder="Ex: DBA do time de TI"></div>
-        <div class="fg"><label>LGPD?</label><select id="wz-lgp"><option value="">—</option><option>Sim — dados pessoais</option><option>Sim — financeiros</option><option>Dados operacionais</option></select></div>
+        <div class="fg"><label>LGPD?</label><select id="wz-lgp"><option value=''>—</option>'+getItems('lgpd').map(t=>`<option${wz.lgpd===t?' selected':''}>${esc(t)}</option>`).join('')+'</select></div>
         <div class="fg full"><label>Restrições</label><textarea id="wz-rst" rows="2" placeholder="Rate limit, horários, VPN..."></textarea></div>
       </div>`;
     case 5:return`<div id="wz-tbls" class="tbl-builder"></div><div class="add-tbl-zone" onclick="openTblModal()">+ Adicionar Tabela</div>`;
@@ -1916,7 +2586,7 @@ function wzHTML(s){
       </div>`;
     case 7:return`
       <div class="fg"><label>Funcionalidades MVP</label>
-        <div class="tags" id="wz-feat">${['ETL/Extração','Transformação','Cálculo KPIs','Agendamento','Envio email','Dashboard','Alertas','Histórico','Log execução','Retry falha','Comparativo','Exportar PDF'].map(t=>`<div class="tag${(wz.features||[]).includes(t)?' on':''}" onclick="wzTag(this,'features')">${t}</div>`).join('')}</div>
+        <div class="tags" id="wz-feat">${getItems('features').map(t=>`<div class="tag${(wz.features||[]).includes(t)?' on':''}" onclick="wzTag(this,'features')">${esc(t)}</div>`).join('')}</div>
       </div>
       <div class="fg"><label>KPIs do Relatório</label>
         <div class="tags" id="wz-kpis">${['Total viagens','On-time %','Custo médio','Custo/KM','KM total','Utilização frota','Taxa ocorrências','SLA entrega','Combustível','NPS','Ranking motoristas','Top rotas'].map(t=>`<div class="tag${(wz.kpis||[]).includes(t)?' on':''}" onclick="wzTag(this,'kpis')">${t}</div>`).join('')}</div>
@@ -2055,13 +2725,19 @@ function saveProj(){
   const now=Date.now();
   if(S.editId){
     const i=S.projects.findIndex(p=>p.id===S.editId);
-    if(i!==-1){const old=S.projects[i];S.projects[i]={...wz,id:S.editId,doc:old.doc||'',layers:old.layers||{},teams:old.teams||[],updatedAt:now};}
+    let projData;
+    if(i!==-1){const old=S.projects[i];projData={...wz,id:S.editId,doc:old.doc||'',layers:old.layers||{},teams:old.teams||[],updatedAt:now};S.projects[i]=projData;}
+    else{projData={...wz,id:S.editId,updatedAt:now};}
+    saveS('projects',S.editId,projData);
     toast('Projeto atualizado!');
   } else {
-    S.projects.push({...wz,id:uid(),doc:'',layers:{},teams:[],createdAt:now,updatedAt:now});
+    const newId=uid();
+    const projData={...wz,id:newId,doc:'',layers:{},teams:[],createdAt:now,updatedAt:now};
+    S.projects.push(projData);
+    saveS('projects',newId,projData);
     toast('Projeto criado!');
   }
-  saveS(); closeOv('ov-proj');
+  closeOv('ov-proj');
   document.getElementById('pill-proj').textContent=S.projects.length;
   renderProjects(); renderHome();
   if(S.editId&&S.curId===S.editId) openProject(S.curId);
@@ -2094,7 +2770,7 @@ function docSnip(t){
 function docClear(){ if(confirm('Limpar documentação?')) document.getElementById('doc-ed').innerHTML=''; }
 function saveDoc(){
   const p=S.projects.find(x=>x.id===S.curId); if(!p)return;
-  p.doc=document.getElementById('doc-ed').innerHTML; p.updatedAt=Date.now(); saveS(); toast('Doc salva!');
+  p.doc=document.getElementById('doc-ed').innerHTML; p.updatedAt=Date.now(); saveS('projects',p.id,{doc:p.doc,updatedAt:p.updatedAt}); toast('Doc salva!');
 }
 
 // ═══════════════════════════════════════════════════
@@ -2377,8 +3053,8 @@ function toast(msg){
   setTimeout(()=>t.classList.remove('show'),2200);
 }
 
-// init
-renderHome();
+// init — Firebase auth handles initApp after login
+// initApp() is called by onAuthStateChanged in the module script
 </script>
 </body>
 </html>
