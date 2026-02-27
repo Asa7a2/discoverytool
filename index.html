@@ -170,7 +170,7 @@ window.openNewUser=()=>{
 /* ── Auth state ── */
 onAuthStateChanged(auth, async(user)=>{
   if(user){
-    const key=user.email.replace(/\./g,'_');
+    const key = user.email;
     let wSnap;
     try{ wSnap=await getDoc(doc(db,'whitelist',key)); }catch(e){ wSnap={exists:()=>false}; }
     if(!wSnap.exists()){
