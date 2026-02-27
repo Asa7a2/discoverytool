@@ -183,7 +183,15 @@ onAuthStateChanged(auth, async(user)=>{
     window._curUser={email:user.email,name:user.displayName||ud.name,photo:user.photoURL,role:ud.role||'viewer'};
     document.getElementById('login-screen').style.display='none';
     document.getElementById('app-root').style.display='flex';
-    if(window.initApp) window.initApp();
+    // Wait for main JS to be ready then call initApp
+    const tryInit = (attempts) => {
+      if(window.initApp){
+        window.initApp();
+      } else if(attempts > 0){
+        setTimeout(()=>tryInit(attempts-1), 100);
+      }
+    };
+    tryInit(20);
   }else{
     document.getElementById('login-screen').style.display='flex';
     document.getElementById('app-root').style.display='none';
@@ -246,6 +254,8 @@ body::before{
    LAYOUT
 ───────────────────────────────────────── */
 .app{display:flex;height:100vh;position:relative;z-index:1}
+#app-root{display:flex!important;flex-direction:column}
+#app-root .app{flex:1;min-height:0}
 
 /* ─────────────────────────────────────────
    SIDEBAR
@@ -902,7 +912,7 @@ select option{background:var(--s2)}
   </div>
 </div>
 <!-- APP ROOT -->
-<div id="app-root" style="display:none;width:100%;height:100%">
+<div id="app-root" style="display:none;width:100%;height:100vh;overflow:hidden;flex-direction:column">
 <div class="app">
 
 <!-- ══════════════ SIDEBAR ══════════════ -->
@@ -1689,7 +1699,7 @@ async function delS(col, id){
 }
 
 // ── Access helpers ──
-function curRole(){ return window._curUser?.role||'viewer'; }
+function curRole(){ return window._curUser?.role||'zeus'; } // default zeus enquanto carrega
 function can(action){
   const r=curRole();
   const m={edit_visual:['zeus'],manage_lists:['zeus','admin'],manage_users:['zeus','admin'],
@@ -1743,9 +1753,16 @@ window.initApp = async function(){
   // update UI
   updateSbUser();
   applyAccessRestrictions();
+  // ensure home page is visible
+  document.querySelectorAll('.page').forEach(x=>x.classList.remove('on'));
+  document.querySelectorAll('.sb-link').forEach(x=>x.classList.remove('on'));
+  const hp=document.getElementById('page-home');
+  if(hp) hp.classList.add('on');
+  const nh=document.getElementById('nl-home');
+  if(nh) nh.classList.add('on');
   renderHome();
-  document.getElementById('pill-proj').textContent = S.projects.length;
-  document.getElementById('pill-meet').textContent = S.meetings.length;
+  const pp=document.getElementById('pill-proj'); if(pp) pp.textContent=S.projects.length;
+  const pm=document.getElementById('pill-meet'); if(pm) pm.textContent=S.meetings.length;
 };
 
 function updateSbUser(){
@@ -1759,6 +1776,7 @@ function updateSbUser(){
 }
 
 function applyAccessRestrictions(){
+  if(!window._curUser){ setTimeout(applyAccessRestrictions, 150); return; } // wait for auth
   const r=curRole();
   const isZeus=r==='zeus', isAdmin=['zeus','admin'].includes(r), canCreate=can('create_project');
   // hide new project btn for viewer/editor
@@ -1951,7 +1969,13 @@ function nav(p){
   if(p==='projetos')  renderProjects();
   if(p==='reunioes')  renderMeetings();
   if(p==='empresas') renderCos();
-  if(p==='settings'){ applyAccessRestrictions(); renderListCatTabs(); }
+  if(p==='settings'){
+    const doSettings = () => {
+      if(!window._curUser){ setTimeout(doSettings, 150); return; }
+      applyAccessRestrictions(); renderListCatTabs();
+    };
+    doSettings();
+  }
   if(p==='access')  { renderPermMatrix(); window.renderUsers&&window.renderUsers(); }
 }
 
@@ -1973,6 +1997,7 @@ function switchLayer(el,id){
 // HOME
 // ═══════════════════════════════════════════════════
 function renderHome(){
+  if(!document.getElementById('page-home')) return; // not ready yet
   const p=S.projects,m=S.meetings,c=S.companies;
   document.getElementById('st-proj').textContent=p.length;
   document.getElementById('st-wip').textContent=p.filter(x=>x.status==='wip').length;
