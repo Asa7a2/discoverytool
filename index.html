@@ -97,7 +97,7 @@ window.fbWatch = (col,cb) => {
 window.fbClearAll = async () => {
   if(!window._curUser||window._curUser.role!=='zeus'){toast('❌ Apenas Zeus pode limpar o banco');return;}
   if(!confirm('⚠️ APAGAR TUDO? Projetos, reuniões, empresas. IRREVERSÍVEL!')) return;
-  const cols=['projects','meetings','companies','customLists'];
+  const cols=['projetos','reunioes','empresas','listas'];
   const batch= writeBatch(db);
   for(const col of cols){
     const snap=await getDocs(collection(db,col));
@@ -912,9 +912,9 @@ select option{background:var(--s2)}
   <nav class="sb-nav">
     <div class="sb-grp">Principal</div>
     <div class="sb-link on" id="nl-home" onclick="nav('home')"><span class="ico">🏠</span> Dashboard</div>
-    <div class="sb-link" id="nl-projects" onclick="nav('projects')"><span class="ico">📁</span> Projetos <span class="sb-pill" id="pill-proj">0</span></div>
-    <div class="sb-link" id="nl-meetings" onclick="nav('meetings')"><span class="ico">📅</span> Reuniões <span class="sb-pill blue" id="pill-meet">0</span></div>
-    <div class="sb-link" id="nl-companies" onclick="nav('companies')"><span class="ico">🏢</span> Empresas</div>
+    <div class="sb-link" id="nl-projects" onclick="nav('projetos')"><span class="ico">📁</span> Projetos <span class="sb-pill" id="pill-proj">0</span></div>
+    <div class="sb-link" id="nl-meetings" onclick="nav('reunioes')"><span class="ico">📅</span> Reuniões <span class="sb-pill blue" id="pill-meet">0</span></div>
+    <div class="sb-link" id="nl-companies" onclick="nav('empresas')"><span class="ico">🏢</span> Empresas</div>
     <div class="sb-grp">Recursos</div>
     <div class="sb-link" id="nl-templates" onclick="nav('templates')"><span class="ico">📋</span> Templates</div>
     <div class="sb-link" id="nl-help" onclick="nav('help')"><span class="ico">❓</span> Ajuda & Glossário</div>
@@ -953,7 +953,7 @@ select option{background:var(--s2)}
     <div class="ph-row">
       <button class="btn btn-gold" onclick="openNewProject()">+ Novo Projeto</button>
       <button class="btn btn-blue" onclick="openNewMeeting()">+ Nova Reunião</button>
-      <button class="btn btn-sec" onclick="nav('projects')">Ver Projetos →</button>
+      <button class="btn btn-sec" onclick="nav('projetos')">Ver Projetos →</button>
     </div>
   </div>
   <div style="padding:24px 32px;flex:1;overflow-y:auto">
@@ -1342,7 +1342,7 @@ select option{background:var(--s2)}
       <div class="ph-row"><div id="d-meta"></div></div>
     </div>
     <div class="row gap2" style="flex-shrink:0;flex-wrap:wrap;margin-top:6px">
-      <button class="btn btn-ghost btn-sm" onclick="nav('projects')">← Voltar</button>
+      <button class="btn btn-ghost btn-sm" onclick="nav('projetos')">← Voltar</button>
       <button class="btn btn-sec btn-sm" onclick="editCurProject()">✏️ Editar</button>
       <button class="btn btn-gold btn-sm" onclick="exportPDF()">📄 PDF Executivo</button>
     </div>
@@ -1717,11 +1717,11 @@ function getItems(key){ const L=getLists(); return L[key]?.items||DEFAULT_LISTS[
 // ── initApp called after auth ──
 window.initApp = async function(){
   // load all collections from Firebase
-  S.projects  = await window.fbGetAll('projects');
-  S.companies = await window.fbGetAll('companies');
-  S.meetings  = await window.fbGetAll('meetings');
+  S.projects  = await window.fbGetAll('projetos');
+  S.companies = await window.fbGetAll('empresas');
+  S.meetings  = await window.fbGetAll('reunioes');
   // load customLists
-  const cl = await window.fbGetAll('customLists');
+  const cl = await window.fbGetAll('listas');
   cl.forEach(doc => { S.customLists[doc.id] = doc; });
   // load theme/branding
   if(window.fbGetAll){
@@ -1732,9 +1732,9 @@ window.initApp = async function(){
     });
   }
   // real-time listeners
-  window.fbWatch('projects',  docs=>{ S.projects=docs;  renderProjects(); renderHome(); });
-  window.fbWatch('companies', docs=>{ S.companies=docs; renderCos(); });
-  window.fbWatch('meetings',  docs=>{ S.meetings=docs;  renderMeetings(); renderHome(); document.getElementById('pill-meet').textContent=docs.length; });
+  window.fbWatch('projetos',  docs=>{ S.projects=docs;  renderProjects(); renderHome(); });
+  window.fbWatch('empresas', docs=>{ S.companies=docs; renderCos(); });
+  window.fbWatch('reunioes',  docs=>{ S.meetings=docs;  renderMeetings(); renderHome(); document.getElementById('pill-meet').textContent=docs.length; });
   // update UI
   updateSbUser();
   applyAccessRestrictions();
@@ -1822,12 +1822,12 @@ function renderListEditor(){
 function updateListItem(key,idx,val){
   const L=getLists(); if(!S.customLists[key]) S.customLists[key]={...DEFAULT_LISTS[key]};
   S.customLists[key].items[idx]=val;
-  saveS('customLists',key,{label:S.customLists[key].label,items:S.customLists[key].items});
+  saveS('listas',key,{label:S.customLists[key].label,items:S.customLists[key].items});
 }
 function removeItem(key,idx){
   const L=getLists(); if(!S.customLists[key]) S.customLists[key]={...DEFAULT_LISTS[key],items:[...DEFAULT_LISTS[key].items]};
   S.customLists[key].items.splice(idx,1);
-  saveS('customLists',key,{label:S.customLists[key].label,items:S.customLists[key].items});
+  saveS('listas',key,{label:S.customLists[key].label,items:S.customLists[key].items});
   renderListEditor();
 }
 function moveItem(key,idx,dir){
@@ -1835,20 +1835,20 @@ function moveItem(key,idx,dir){
   const items=S.customLists[key].items, ni=idx+dir;
   if(ni<0||ni>=items.length) return;
   [items[idx],items[ni]]=[items[ni],items[idx]];
-  saveS('customLists',key,{label:S.customLists[key].label,items});
+  saveS('listas',key,{label:S.customLists[key].label,items});
   renderListEditor();
 }
 function addItem(key){
   const inp=document.getElementById('new-list-item'); if(!inp||!inp.value.trim()) return;
   const L=getLists(); if(!S.customLists[key]) S.customLists[key]={...DEFAULT_LISTS[key],items:[...DEFAULT_LISTS[key].items]};
   S.customLists[key].items.push(inp.value.trim());
-  saveS('customLists',key,{label:S.customLists[key].label,items:S.customLists[key].items});
+  saveS('listas',key,{label:S.customLists[key].label,items:S.customLists[key].items});
   inp.value=''; renderListEditor();
 }
 function resetList(key){
   if(!confirm('Restaurar lista ao padrão original?')) return;
   delete S.customLists[key];
-  window.fbDel&&window.fbDel('customLists',key);
+  window.fbDel&&window.fbDel('listas',key);
   renderListEditor(); toast('Lista restaurada!');
 }
 
@@ -1943,9 +1943,9 @@ function nav(p){
   const nl=document.getElementById('nl-'+p);
   if(nl) nl.classList.add('on');
   if(p==='home')      renderHome();
-  if(p==='projects')  renderProjects();
-  if(p==='meetings')  renderMeetings();
-  if(p==='companies') renderCos();
+  if(p==='projetos')  renderProjects();
+  if(p==='reunioes')  renderMeetings();
+  if(p==='empresas') renderCos();
   if(p==='settings'){ applyAccessRestrictions(); renderListCatTabs(); }
   if(p==='access')  { renderPermMatrix(); window.renderUsers&&window.renderUsers(); }
 }
@@ -2145,7 +2145,7 @@ function openProject(id){
 
 function delProj(id){
   if(!confirm('Apagar projeto?'))return;
-  delS('projects',id);
+  delS('projetos',id);
   S.projects=S.projects.filter(p=>p.id!==id);
   renderProjects(); renderHome();
   toast('Projeto apagado');
@@ -2268,12 +2268,12 @@ function saveMeeting(){
     const i=S.meetings.findIndex(x=>x.id===S._editMeetId);
     const meetData={...obj,id:S._editMeetId,createdAt:i!==-1?S.meetings[i].createdAt:Date.now()};
     if(i!==-1) S.meetings[i]=meetData; else S.meetings.push(meetData);
-    saveS('meetings',S._editMeetId,meetData);
+    saveS('reunioes',S._editMeetId,meetData);
   } else {
     const newId=uid();
     const meetData={...obj,id:newId,createdAt:Date.now()};
     S.meetings.push(meetData);
-    saveS('meetings',newId,meetData);
+    saveS('reunioes',newId,meetData);
   }
   closeOv('ov-meet');
   renderMeetings(); renderHome();
@@ -2284,7 +2284,7 @@ function saveMeeting(){
 
 function delMeeting(id){
   if(!confirm('Apagar reunião?'))return;
-  delS('meetings',id);
+  delS('reunioes',id);
   S.meetings=S.meetings.filter(m=>m.id!==id);
   renderMeetings(); renderHome();
   if(S.curId) renderDetailMeetings(S.curId);
@@ -2339,20 +2339,20 @@ function saveCo(){
   if(S._editCoId){
     const co=S.companies.find(x=>x.id===S._editCoId);
     if(co){co.name=name;co.sector=gv('co-sec');co.contact=gv('co-cnt');co.notes=gv('co-note');}
-    saveS('companies',S._editCoId,S.companies.find(x=>x.id===S._editCoId)||{});
+    saveS('empresas',S._editCoId,S.companies.find(x=>x.id===S._editCoId)||{});
   } else {
     const newCoId=uid();
     const coData={id:newCoId,name,sector:gv('co-sec'),contact:gv('co-cnt'),notes:gv('co-note')};
     S.companies.push(coData);
-    saveS('companies',newCoId,coData);
+    saveS('empresas',newCoId,coData);
   }
   closeOv('ov-co'); renderCos(); renderHome(); toast('Empresa salva!');
 }
 function delCo(id){
   if(!confirm('Apagar empresa?'))return;
-  delS('companies',id);
+  delS('empresas',id);
   S.companies=S.companies.filter(c=>c.id!==id);
-  S.projects.forEach(p=>{if(p.companyId===id){p.companyId=null;saveS('projects',p.id,p);}});
+  S.projects.forEach(p=>{if(p.companyId===id){p.companyId=null;saveS('projetos',p.id,p);}});
   renderCos(); toast('Empresa apagada');
 }
 
@@ -2486,7 +2486,7 @@ function saveLayers(){
     colMaps,transforms,filters,svJoins:gv('sv-joins'),
     aggs,goTable:gv('go-table'),goGran:gv('go-gran'),goConsumers:gv('go-consumers')
   };
-  p.updatedAt=Date.now(); saveS('projects',p.id,p); toast('Camadas salvas!');
+  p.updatedAt=Date.now(); saveS('projetos',p.id,p); toast('Camadas salvas!');
 }
 
 // ═══════════════════════════════════════════════════
@@ -2546,10 +2546,10 @@ function saveTeam(){
   const perms={};
   S.projects.forEach(pr=>perms[pr.id]=lvl);
   p.teams.push({id:uid(),name:nm,members:gv('team-mb'),perms});
-  saveS('projects',p.id,p); closeOv('ov-team'); renderPerms(p); toast('Time adicionado!');
+  saveS('projetos',p.id,p); closeOv('ov-team'); renderPerms(p); toast('Time adicionado!');
 }
 function savePerms(){
-  const p=S.projects.find(x=>x.id===S.curId); if(p) saveS('projects',p.id,p);
+  const p=S.projects.find(x=>x.id===S.curId); if(p) saveS('projetos',p.id,p);
   toast('Permissões salvas!');
 }
 
@@ -2781,13 +2781,13 @@ function saveProj(){
     let projData;
     if(i!==-1){const old=S.projects[i];projData={...wz,id:S.editId,doc:old.doc||'',layers:old.layers||{},teams:old.teams||[],updatedAt:now};S.projects[i]=projData;}
     else{projData={...wz,id:S.editId,updatedAt:now};}
-    saveS('projects',S.editId,projData);
+    saveS('projetos',S.editId,projData);
     toast('Projeto atualizado!');
   } else {
     const newId=uid();
     const projData={...wz,id:newId,doc:'',layers:{},teams:[],createdAt:now,updatedAt:now};
     S.projects.push(projData);
-    saveS('projects',newId,projData);
+    saveS('projetos',newId,projData);
     toast('Projeto criado!');
   }
   closeOv('ov-proj');
@@ -2823,7 +2823,7 @@ function docSnip(t){
 function docClear(){ if(confirm('Limpar documentação?')) document.getElementById('doc-ed').innerHTML=''; }
 function saveDoc(){
   const p=S.projects.find(x=>x.id===S.curId); if(!p)return;
-  p.doc=document.getElementById('doc-ed').innerHTML; p.updatedAt=Date.now(); saveS('projects',p.id,{doc:p.doc,updatedAt:p.updatedAt}); toast('Doc salva!');
+  p.doc=document.getElementById('doc-ed').innerHTML; p.updatedAt=Date.now(); saveS('projetos',p.id,{doc:p.doc,updatedAt:p.updatedAt}); toast('Doc salva!');
 }
 
 // ═══════════════════════════════════════════════════
