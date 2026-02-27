@@ -115,7 +115,7 @@ window.saveUser = async () => {
   const email = document.getElementById('u-email')?.value.trim().toLowerCase();
   const role  = document.getElementById('u-role')?.value||'viewer';
   if(!name||!email){alert('Nome e e-mail obrigatórios');return;}
-  const key = email.replace(/\./g,'_');
+  cconst key = email;
   await window.fbSave('whitelist', key, {name,email,role});
   closeOv('ov-user');
   renderUsers();
