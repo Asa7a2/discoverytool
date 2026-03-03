@@ -1087,8 +1087,11 @@ select option{background:var(--s2)}
 <div class="page" id="page-help">
   <div class="ph">
     <div class="ph-eye">Ajuda & Glossário</div>
-    <div class="ph-h">O que é Discovery?</div>
-    <div class="ph-sub">Entenda cada etapa, conceito técnico, e o significado das camadas Bronze / Silver / Gold.</div>
+    <div class="ph-h">Ajuda & Glossário</div>
+    <div class="ph-sub">Entenda cada conceito técnico. <span id="gl-edit-hint" style="display:none;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--gold)">🔱 Zeus/Admin podem editar</span></div>
+    <div class="ph-row" id="gl-edit-row" style="display:none">
+      <button class="btn btn-gold btn-sm" onclick="openGlossaryEditor()">✏️ Editar Glossário</button>
+    </div>
   </div>
   <div style="padding:24px 32px;flex:1;overflow-y:auto">
     <div class="help-grid">
@@ -1098,24 +1101,30 @@ select option{background:var(--s2)}
       <div class="hcard"><div class="hcard-t">🔐 Sistema de Hierarquia</div><div class="hcard-b">Configure quais <strong>times podem visualizar ou editar</strong> cada projeto. Time 1 pode ver Projeto A mas não Projeto B. Útil para separar clientes, áreas ou squads.</div></div>
     </div>
     <div class="divider"></div>
-    <div class="syne" style="font-size:17px;font-weight:800;margin-bottom:18px">📖 Glossário</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 36px">
-      <div>
-        <div class="gl"><div class="gl-t">DISCOVERY</div><div class="gl-d">Fase de levantamento de requisitos técnicos e de negócio antes do desenvolvimento.</div></div>
-        <div class="gl"><div class="gl-t">BRONZE LAYER</div><div class="gl-d">Camada com dado bruto da fonte. Renomeação de colunas para padrão em inglês (snake_case).</div></div>
-        <div class="gl"><div class="gl-t">SILVER LAYER</div><div class="gl-d">Camada de transformação: joins, colunas calculadas (ex: país + estado = location), filtros (≥0).</div></div>
-        <div class="gl"><div class="gl-t">GOLD LAYER</div><div class="gl-d">Camada de negócio: KPIs, agregações, marts prontos para BI e relatórios.</div></div>
-        <div class="gl"><div class="gl-t">ETL</div><div class="gl-d">Extract, Transform, Load — extrair dados, transformar e carregar em outro sistema.</div></div>
-        <div class="gl"><div class="gl-t">CHAVE PRIMÁRIA (PK)</div><div class="gl-d">Campo que identifica unicamente cada registro. Ex: id_viagem, id_motorista.</div></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
+      <div class="syne" style="font-size:17px;font-weight:800">📖 Glossário</div>
+      <span class="xs txt-muted mono" id="gl-count"></span>
+    </div>
+    <div id="gl-list" style="display:grid;grid-template-columns:1fr 1fr;gap:0 36px"></div>
+  </div>
+</div>
+
+<!-- GLOSSARY EDITOR MODAL -->
+<div class="ov" id="ov-glossary">
+  <div class="modal" style="max-width:680px;max-height:85vh;display:flex;flex-direction:column">
+    <div class="mhd"><div class="mhd-t">✏️ Editar Glossário</div><button class="mcl" onclick="closeOv('ov-glossary')">✕</button></div>
+    <div class="mbd" style="flex:1;overflow-y:auto">
+      <div style="margin-bottom:12px;font-size:12px;color:var(--t2)">Adicione, edite ou remova termos do glossário. Salvo no Firebase e visível para todos.</div>
+      <div id="gl-editor-list"></div>
+      <div style="display:flex;gap:8px;margin-top:14px;padding-top:14px;border-top:1px solid var(--b0)">
+        <input id="gl-new-term" placeholder="Novo termo (ex: CDC)" style="width:180px;font-family:'JetBrains Mono',monospace;font-size:11px;text-transform:uppercase">
+        <input id="gl-new-def" placeholder="Definição..." style="flex:1">
+        <button class="btn btn-gold btn-sm" onclick="addGlossaryTerm()">+ Adicionar</button>
       </div>
-      <div>
-        <div class="gl"><div class="gl-t">CHAVE ESTRANGEIRA (FK)</div><div class="gl-d">Campo que referencia a PK de outra tabela, criando relacionamento entre entidades.</div></div>
-        <div class="gl"><div class="gl-t">STAR SCHEMA</div><div class="gl-d">Modelo com tabela FATO central conectada a tabelas de DIMENSÃO. Padrão para BI e DW.</div></div>
-        <div class="gl"><div class="gl-t">KPI</div><div class="gl-d">Key Performance Indicator — indicadores que medem se os objetivos foram alcançados.</div></div>
-        <div class="gl"><div class="gl-t">MVP</div><div class="gl-d">Minimum Viable Product — versão mínima que entrega valor real ao usuário final.</div></div>
-        <div class="gl"><div class="gl-t">SCHEDULER</div><div class="gl-d">Sistema que executa tarefas automaticamente em horários definidos. Ex: Airflow, Cron.</div></div>
-        <div class="gl"><div class="gl-t">LGPD</div><div class="gl-d">Lei Geral de Proteção de Dados (13.709/2018). Define regras para uso de dados pessoais no Brasil.</div></div>
-      </div>
+    </div>
+    <div class="mft">
+      <button class="btn btn-ghost btn-sm" onclick="closeOv('ov-glossary')">Fechar</button>
+      <button class="btn btn-gold btn-sm" onclick="saveGlossary()">💾 Salvar Glossário</button>
     </div>
   </div>
 </div>
@@ -1723,7 +1732,7 @@ const DEFAULT_LISTS = {
   techLevel:  {label:'🧠 Nível Técnico',   items:['Não técnico','Semi-técnico','Técnico','Dev / Engenheiro']},
   consumption:{label:'📬 Como Consome',    items:['Email automático','Dashboard Web','WhatsApp/Teams','PDF','Excel/Sheets','API','Slack','Mobile App']},
   features:   {label:'🚀 MVP Features',    items:['ETL/Extração','Transformação','Cálculo KPIs','Agendamento','Envio email','Dashboard','Alertas','Histórico','Log execução','Retry falha','Comparativo','Exportar PDF']},
-  kpis:       {label:'📊 KPIs Relatório',  items:['Total viagens','On-time %','Custo médio','Custo/KM','KM total','Utilização frota','Taxa ocorrências','SLA entrega','Combustível','NPS','Ranking motoristas','Top rotas']},
+  // kpis removed — now a free-text textarea field
   risks:      {label:'⚠️ Riscos',          items:['Dados inconsistentes','API sem documentação','Sem acesso prod','Mudança escopo','Dependência terceiro','Sem homologação','Volume alto','Prazo apertado']},
 };
 function getLists(){ return Object.assign({}, DEFAULT_LISTS, S.customLists||{}); }
@@ -1756,6 +1765,7 @@ window.initApp = async function(){
   applyAccessRestrictions();
   // Re-apply after short delay to ensure DOM is ready
   setTimeout(()=>{ applyAccessRestrictions(); updateSbUser(); }, 300);
+  loadGlossary();
   // ensure home page is visible
   document.querySelectorAll('.page').forEach(x=>x.classList.remove('on'));
   document.querySelectorAll('.sb-link').forEach(x=>x.classList.remove('on'));
@@ -2138,7 +2148,10 @@ function openProject(id){
   document.getElementById('ov-sth').textContent=p.stakeholders||'—';
   document.getElementById('ov-deps').textContent=p.dependencies||'—';
   document.getElementById('ov-risks').innerHTML=(p.risks||[]).map(r=>`<span class="tag on" style="cursor:default">${esc(r)}</span>`).join('');
-  document.getElementById('ov-kpis').innerHTML=(p.kpis||[]).map(k=>`<span class="tag on" style="cursor:default">${esc(k)}</span>`).join('');
+  const kpisEl=document.getElementById('ov-kpis');
+  if(kpisEl) kpisEl.innerHTML=(p.kpis||[]).length
+    ? (p.kpis||[]).map(k=>`<div style="padding:4px 0;border-bottom:1px solid var(--b0);color:var(--t2);font-size:12px">• ${esc(k)}</div>`).join('')
+    : '<span style="color:var(--t3);font-size:12px">Nenhum KPI definido</span>';
   document.getElementById('ov-feat').innerHTML=(p.features||[]).map(f=>`<span class="tag on" style="cursor:default">${esc(f)}</span>`).join('');
   document.getElementById('ov-info').innerHTML=[
     ['Responsável',p.requester],['Prioridade',p.priority],
@@ -2215,7 +2228,10 @@ function editProj(id){
   if(!wz.relationships)wz.relationships=[];
   if(!wz.stack)wz.stack={backend:[],db:[],scheduler:[],report:[]};
   if(!wz.sourceTypes)wz.sourceTypes=[];
-  if(!wz.risks)wz.risks=[]; if(!wz.kpis)wz.kpis=[]; if(!wz.features)wz.features=[];
+  // collect kpis from textarea
+  const kpiTxt=document.getElementById('wz-kpis-txt');
+  if(kpiTxt) wz.kpis=kpiTxt.value.split('\n').map(x=>x.trim()).filter(Boolean);
+  if(!wz.risks)wz.risks=[]; if(!wz.features)wz.features=[];
   wzStep=0;
   document.getElementById('m-proj-t').textContent='Editar Projeto';
   buildWiz();
@@ -2697,10 +2713,10 @@ function wzHTML(s){
       <div class="fg"><label>Funcionalidades MVP</label>
         <div class="tags" id="wz-feat">${getItems('features').map(t=>'<div class="tag'+((wz.features||[]).includes(t)?' on':'')+'" data-val="'+esc(t)+'" onclick="wzTag(this,\'features\')">'+esc(t)+'</div>').join('')}</div>
       </div>
-      <div class="fg"><label>KPIs do Relatório</label>
-        <div class="tags" id="wz-kpis">${['Total viagens','On-time %','Custo médio','Custo/KM','KM total','Utilização frota','Taxa ocorrências','SLA entrega','Combustível','NPS','Ranking motoristas','Top rotas'].map(t=>`<div class="tag${(wz.kpis||[]).includes(t)?' on':''}" onclick="wzTag(this,'kpis')">${t}</div>`).join('')}</div>
-      </div>
-      <div class="fg"><label>KPIs Customizados</label><input id="wz-ckpi" placeholder="Ex: IEL, Taxa de devolução..."></div>`;
+      <div class="fg full"><label>KPIs do Relatório <span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--t3)">(um por linha)</span></label>
+        <textarea id="wz-kpis-txt" rows="5" placeholder="Ex:\nTotal de viagens\nOntime %\nCusto por KM\nUtilização da frota\nNPS motoristas">${(wz.kpis||[]).join('\n')}</textarea>
+        <div style="font-size:10px;color:var(--t3);margin-top:4px;font-family:'JetBrains Mono',monospace">Digite cada KPI em uma linha separada</div>
+      </div>`;
     case 8:return`
       <div class="fg"><label>Riscos</label>
         <div class="tags" id="wz-risk">${['Dados inconsistentes','API sem documentação','Sem acesso banco prod','Mudança escopo','Dependência terceiro','Sem homologação','Volume alto','Prazo apertado'].map(t=>`<div class="tag${(wz.risks||[]).includes(t)?' on':''}" onclick="wzTag(this,'risks')">${t}</div>`).join('')}</div>
@@ -3166,6 +3182,66 @@ function toast(msg){
 }
 
 // init — Firebase auth handles initApp after login
+
+// ── GLOSSARY ──
+let GL = [["DISCOVERY", "Fase de levantamento de requisitos técnicos e de negócio antes do desenvolvimento."], ["BRONZE LAYER", "Camada com dado bruto da fonte. Renomeação de colunas para padrão em inglês (snake_case)."], ["SILVER LAYER", "Camada de transformação: joins, colunas calculadas (ex: país + estado = location), filtros (≥0)."], ["GOLD LAYER", "Camada de negócio: KPIs, agregações, marts prontos para BI e relatórios."], ["ETL", "Extract, Transform, Load — extrair dados, transformar e carregar em outro sistema."], ["CHAVE PRIMÁRIA (PK)", "Campo que identifica unicamente cada registro. Ex: id_viagem, id_motorista."], ["CHAVE ESTRANGEIRA (FK)", "Campo que referencia a PK de outra tabela, criando relacionamento entre entidades."], ["STAR SCHEMA", "Modelo com tabela FATO central conectada a tabelas de DIMENSÃO. Padrão para BI e DW."], ["KPI", "Key Performance Indicator — indicadores que medem se os objetivos foram alcançados."], ["MVP", "Minimum Viable Product — versão mínima que entrega valor real ao usuário final."], ["SCHEDULER", "Sistema que executa tarefas automaticamente em horários definidos. Ex: Airflow, Cron."], ["LGPD", "Lei Geral de Proteção de Dados (13.709/2018). Define regras para uso de dados pessoais no Brasil."], ["CDC", "Change Data Capture — captura mudanças em tempo real no banco de dados (insert, update, delete)."], ["LAKEHOUSE", "Arquitetura que combina Data Lake (armazenamento flexível) com Data Warehouse (queries SQL)."], ["ONELAKE", "Storage centralizado do Microsoft Fabric — único lugar para todos os dados da organização."], ["FABRIC PIPELINE", "Equivalente ao Azure Data Factory dentro do Microsoft Fabric para orquestrar fluxos de dados."], ["PYSPARK", "Python com Apache Spark — processa grandes volumes de dados em paralelo no Fabric/Databricks."], ["DAX", "Data Analysis Expressions — linguagem de fórmulas do Power BI para criar métricas e cálculos."], ["DATAFLOW GEN2", "Conector visual do Fabric para extrair e transformar dados sem código (Power Query)."], ["SLA", "Service Level Agreement — acordo de nível de serviço. Ex: relatório disponível até 8h toda segunda."]];
+
+function renderGlossary(){
+  const cont = document.getElementById('gl-list'); if(!cont) return;
+  const half = Math.ceil(GL.length/2);
+  const col1 = GL.slice(0,half);
+  const col2 = GL.slice(half);
+  const renderCol = arr => arr.map(([t,d])=>`<div class="gl"><div class="gl-t">${esc(t)}</div><div class="gl-d">${esc(d)}</div></div>`).join('');
+  cont.innerHTML = '<div>'+renderCol(col1)+'</div><div>'+renderCol(col2)+'</div>';
+  const ct = document.getElementById('gl-count'); if(ct) ct.textContent = GL.length+' termos';
+  // show edit btn for zeus/admin
+  const r=curRole();
+  const editRow=document.getElementById('gl-edit-row'); if(editRow) editRow.style.display=['zeus','admin'].includes(r)?'flex':'none';
+  const editHint=document.getElementById('gl-edit-hint'); if(editHint) editHint.style.display=['zeus','admin'].includes(r)?'':'none';
+}
+
+function openGlossaryEditor(){
+  renderGlossaryEditor();
+  openOv('ov-glossary');
+}
+
+function renderGlossaryEditor(){
+  const cont = document.getElementById('gl-editor-list'); if(!cont) return;
+  cont.innerHTML = GL.map(([t,d],i)=>`
+    <div style="display:flex;gap:8px;align-items:flex-start;padding:7px 0;border-bottom:1px solid var(--b0)">
+      <input value="${esc(t)}" data-idx="${i}" data-field="term" style="width:160px;font-family:'JetBrains Mono',monospace;font-size:10px;text-transform:uppercase" onchange="updateGlTerm(${i},0,this.value)">
+      <input value="${esc(d)}" data-idx="${i}" data-field="def" style="flex:1;font-size:12px" onchange="updateGlTerm(${i},1,this.value)">
+      <button class="btn btn-red btn-xs btn-ic" onclick="removeGlTerm(${i})" title="Remover">✕</button>
+    </div>`).join('');
+}
+
+function updateGlTerm(i,field,val){ GL[i][field]=val; }
+function removeGlTerm(i){ GL.splice(i,1); renderGlossaryEditor(); }
+function addGlossaryTerm(){
+  const t=document.getElementById('gl-new-term')?.value.trim().toUpperCase();
+  const d=document.getElementById('gl-new-def')?.value.trim();
+  if(!t||!d){alert('Preencha o termo e a definição');return;}
+  GL.push([t,d]);
+  document.getElementById('gl-new-term').value='';
+  document.getElementById('gl-new-def').value='';
+  renderGlossaryEditor();
+  toast('Termo adicionado!');
+}
+async function saveGlossary(){
+  await window.fbSave('settings','glossary',{terms:GL});
+  renderGlossary();
+  closeOv('ov-glossary');
+  toast('Glossário salvo!');
+}
+async function loadGlossary(){
+  try{
+    const snap = await window.fbGetAll('settings');
+    const gl = snap.find(d=>d.id==='glossary');
+    if(gl?.terms) GL=gl.terms;
+  }catch(e){}
+  renderGlossary();
+}
+
 // initApp() is called by onAuthStateChanged in the module script
 </script>
 </body>
