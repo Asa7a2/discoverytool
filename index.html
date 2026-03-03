@@ -879,6 +879,19 @@ select option{background:var(--s2)}
   .help-grid{grid-template-columns:1fr}
   .perm-grid{grid-template-columns:1fr}
 }
+
+/* ── Matrix ── */
+#matrix-canvas{cursor:crosshair}
+.mx-item{display:flex;align-items:center;justify-content:space-between;padding:7px 10px;border-radius:6px;margin-bottom:6px;border:1px solid var(--b0);background:var(--s2);font-size:11px}
+.mx-item-name{font-weight:600;color:var(--t1);flex:1}
+.mx-item-scores{font-family:monospace;font-size:10px;color:var(--t3);margin:0 8px}
+.mx-badge{font-size:9px;padding:2px 7px;border-radius:100px;font-family:monospace}
+/* ── Canvas ── */
+.canvas-cell{background:var(--s2);border:1px solid var(--b0);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:8px;min-height:140px}
+.canvas-cell-q{font-size:10px;color:var(--gold);font-weight:700;font-family:monospace;line-height:1.4}
+.canvas-cell textarea{flex:1;background:var(--s1);border:1px solid var(--b0);border-radius:4px;color:var(--t1);font-size:11px;resize:none;padding:7px;min-height:80px;font-family:inherit}
+.canvas-cell textarea:focus{outline:none;border-color:var(--gold)}
+
 </style>
 </head>
 <body>
@@ -934,6 +947,7 @@ select option{background:var(--s2)}
     <div class="sb-link" id="nl-templates" onclick="nav('templates')"><span class="ico">📋</span> Templates</div>
     <div class="sb-link" id="nl-help" onclick="nav('help')"><span class="ico">❓</span> Ajuda & Glossário</div>
     <div class="sb-grp">Sistema</div>
+    <div class="sb-link" id="nl-matrix" onclick="nav('matrix')"><span class="ico">🎯</span> Matriz Valor/Complexidade</div>
     <div class="sb-link" id="nl-settings" onclick="nav('settings')"><span class="ico">⚙️</span> Configurações</div>
     <div class="sb-link" id="nl-access" onclick="nav('access')"><span class="ico">🔐</span> Acesso & Usuários</div>
   </nav>
@@ -1125,6 +1139,73 @@ select option{background:var(--s2)}
     <div class="mft">
       <button class="btn btn-ghost btn-sm" onclick="closeOv('ov-glossary')">Fechar</button>
       <button class="btn btn-gold btn-sm" onclick="saveGlossary()">💾 Salvar Glossário</button>
+    </div>
+  </div>
+</div>
+
+<div class="page" id="page-matrix">
+  <div class="ph">
+    <div class="ph-eye">Ferramentas</div>
+    <div class="ph-h">Matriz Valor × Complexidade</div>
+    <div class="ph-sub">Priorize projetos e iniciativas pelo valor para o negócio vs complexidade técnica.</div>
+    <div class="ph-row">
+      <button class="btn btn-gold btn-sm" onclick="openAddMatrixItem()">+ Adicionar Item</button>
+      <button class="btn btn-ghost btn-sm" onclick="clearManualItems()">🗑 Limpar Manuais</button>
+    </div>
+  </div>
+  <div style="padding:24px 32px;flex:1;overflow-y:auto">
+    <div style="display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap">
+      <!-- Matrix Chart -->
+      <div style="flex:1;min-width:400px">
+        <div style="position:relative;background:var(--s1);border:1px solid var(--b0);border-radius:var(--r);overflow:hidden" id="matrix-wrap">
+          <canvas id="matrix-canvas" width="560" height="480" style="display:block;width:100%"></canvas>
+        </div>
+        <div style="display:flex;gap:16px;margin-top:10px;font-size:10px;font-family:monospace;color:var(--t3)">
+          <span style="display:flex;align-items:center;gap:5px"><span style="width:10px;height:10px;border-radius:50%;background:#4ade80;display:inline-block"></span>Quick Win (Alto valor, baixa complexidade)</span>
+          <span style="display:flex;align-items:center;gap:5px"><span style="width:10px;height:10px;border-radius:50%;background:#facc15;display:inline-block"></span>Estratégico</span>
+          <span style="display:flex;align-items:center;gap:5px"><span style="width:10px;height:10px;border-radius:50%;background:#f87171;display:inline-block"></span>Evitar</span>
+        </div>
+      </div>
+      <!-- Items list -->
+      <div style="width:260px;flex-shrink:0">
+        <div style="font-size:12px;font-weight:700;margin-bottom:10px;color:var(--t1)">Itens na Matriz</div>
+        <div id="matrix-items-list" style="max-height:420px;overflow-y:auto"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ADD MATRIX ITEM MODAL -->
+<div class="ov" id="ov-matrix">
+  <div class="modal" style="max-width:440px">
+    <div class="mhd"><div class="mhd-t" id="matrix-modal-title">Adicionar Item</div><button class="mcl" onclick="closeOv('ov-matrix')">✕</button></div>
+    <div class="mbd">
+      <div class="fgrid">
+        <div class="fg full"><label>Nome do Item <span class="req">*</span></label><input id="mx-name" placeholder="Ex: Dashboard Financeiro"></div>
+        <div class="fg"><label>Valor para o Negócio (1–5)</label>
+          <select id="mx-val">
+            <option value="1">1 — Muito Baixo</option>
+            <option value="2">2 — Baixo</option>
+            <option value="3" selected>3 — Médio</option>
+            <option value="4">4 — Alto</option>
+            <option value="5">5 — Muito Alto</option>
+          </select>
+        </div>
+        <div class="fg"><label>Complexidade Técnica (1–5)</label>
+          <select id="mx-cmp">
+            <option value="1">1 — Muito Baixa</option>
+            <option value="2">2 — Baixa</option>
+            <option value="3" selected>3 — Média</option>
+            <option value="4">4 — Alta</option>
+            <option value="5">5 — Muito Alta</option>
+          </select>
+        </div>
+        <div class="fg full"><label>Observação</label><input id="mx-note" placeholder="Opcional"></div>
+      </div>
+    </div>
+    <div class="mft">
+      <button class="btn btn-ghost btn-sm" onclick="closeOv('ov-matrix')">Cancelar</button>
+      <button class="btn btn-gold btn-sm" onclick="saveMatrixItem()">Adicionar</button>
     </div>
   </div>
 </div>
@@ -1379,6 +1460,7 @@ select option{background:var(--s2)}
     <div class="dtab" onclick="dTab(this,'d-meetings')">Reuniões</div>
     <div class="dtab" onclick="dTab(this,'d-perms')">Equipe & Acesso</div>
     <div class="dtab" onclick="dTab(this,'d-doc')">Doc Técnica</div>
+    <div class="dtab" onclick="dTab(this,'d-canvas')">🎨 Canvas</div>
     <div class="dtab" onclick="dTab(this,'d-export')">Exportar</div>
   </div>
   <div style="flex:1;overflow-y:auto">
@@ -1517,14 +1599,17 @@ select option{background:var(--s2)}
 
     <!-- PERMISSIONS -->
     <div class="dtab-panel" id="d-perms">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-        <div><div class="syne fw7" style="font-size:15px">Equipe & Hierarquia de Acesso</div><div class="xs txt-muted mt1">Defina quais times podem visualizar ou editar este projeto.</div></div>
-        <button class="btn btn-sec btn-sm" onclick="addTeam()">+ Adicionar Time</button>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <div><div class="syne fw7" style="font-size:15px">Equipe & Acesso</div><div class="xs txt-muted mt1">Vincule usuários da whitelist com permissões por projeto.</div></div>
+        <button class="btn btn-gold btn-sm" id="btn-add-member" onclick="openAddMember()">+ Vincular Usuário</button>
       </div>
-      <div class="perm-grid" id="d-perm-grid"></div>
-      <div class="step-nav" style="border-top:none">
-        <button class="btn btn-gold btn-sm" onclick="savePerms()">💾 Salvar Permissões</button>
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--gold-d);border:1px solid rgba(233,184,75,.2);border-radius:8px;margin-bottom:16px">
+        <span style="font-size:18px">👑</span>
+        <div style="flex:1"><div style="font-size:10px;font-weight:700;color:var(--gold);font-family:monospace">DONO DO PROJETO</div><div style="font-size:13px;color:var(--t1)" id="proj-owner-name">—</div></div>
+        <button class="btn btn-ghost btn-xs" id="btn-change-owner" onclick="openChangeOwner()" style="display:none">Transferir</button>
       </div>
+      <div id="d-perm-grid"></div>
+      <div class="step-nav" style="border-top:none"><button class="btn btn-gold btn-sm" onclick="savePerms()">💾 Salvar</button></div>
     </div>
 
     <!-- DOC -->
@@ -1558,6 +1643,13 @@ select option{background:var(--s2)}
     </div>
 
     <!-- EXPORT -->
+    <div class="dtab-panel" id="d-canvas">
+      <div class="section-h" style="margin-bottom:4px">🎨 Business Model Canvas</div>
+      <div style="font-size:11px;color:var(--t3);margin-bottom:18px;font-family:monospace">Perguntas estratégicas de negócio vinculadas a este projeto</div>
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:16px" id="canvas-grid"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px" id="canvas-grid-bot"></div>
+      <button class="btn btn-gold btn-sm" onclick="saveCanvas()">💾 Salvar Canvas</button>
+    </div>
     <div class="dtab-panel" id="d-export">
       <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
         <button class="btn btn-gold" onclick="exportPDF()">📄 Exportar PDF Executivo (Ata)</button>
@@ -1668,23 +1760,35 @@ select option{background:var(--s2)}
 </div>
 
 <!-- TEAM MODAL -->
-<div class="ov" id="ov-team">
-  <div class="modal" style="max-width:380px">
-    <div class="mhd"><div class="mhd-t">Adicionar Time</div><button class="mcl" onclick="closeOv('ov-team')">✕</button></div>
+<div class="ov" id="ov-member">
+  <div class="modal" style="max-width:440px">
+    <div class="mhd"><div class="mhd-t">Vincular Usuário ao Projeto</div><button class="mcl" onclick="closeOv('ov-member')">✕</button></div>
     <div class="mbd">
-      <div class="fg"><label>Nome do Time <span class="req">*</span></label><input id="team-nm" placeholder="Ex: Squad Transporte, Time de TI"></div>
-      <div class="fg"><label>Membros</label><input id="team-mb" placeholder="Ex: João, Maria, Pedro"></div>
-      <div class="fg"><label>Nível padrão de acesso</label>
-        <select id="team-lvl">
-          <option value="view">Ver apenas</option>
-          <option value="edit">Editar</option>
-          <option value="none">Sem acesso</option>
-        </select>
+      <div class="fg full" style="margin-bottom:14px"><label>Usuário <span class="req">*</span></label><select id="member-sel" style="width:100%"></select></div>
+      <div class="xxs mono txt-dim" style="letter-spacing:1px;text-transform:uppercase;margin-bottom:8px">Permissões neste projeto</div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer"><input type="checkbox" id="mp-view" checked> <span>👁 Visualizar projeto</span></label>
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer"><input type="checkbox" id="mp-edit"> <span>✏️ Editar conteúdo</span></label>
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer"><input type="checkbox" id="mp-meeting"> <span>📅 Adicionar reuniões</span></label>
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer"><input type="checkbox" id="mp-export"> <span>📄 Exportar PDF</span></label>
       </div>
     </div>
     <div class="mft">
-      <button class="btn btn-ghost btn-sm" onclick="closeOv('ov-team')">Cancelar</button>
-      <button class="btn btn-gold btn-sm" onclick="saveTeam()">Adicionar Time</button>
+      <button class="btn btn-ghost btn-sm" onclick="closeOv('ov-member')">Cancelar</button>
+      <button class="btn btn-gold btn-sm" onclick="saveMember()">Vincular</button>
+    </div>
+  </div>
+</div>
+<div class="ov" id="ov-owner">
+  <div class="modal" style="max-width:380px">
+    <div class="mhd"><div class="mhd-t">Transferir Dono do Projeto</div><button class="mcl" onclick="closeOv('ov-owner')">✕</button></div>
+    <div class="mbd">
+      <div style="font-size:12px;color:var(--t2);margin-bottom:12px">O novo dono terá controle total sobre as permissões deste projeto.</div>
+      <div class="fg full"><label>Novo Dono <span class="req">*</span></label><select id="owner-sel" style="width:100%"></select></div>
+    </div>
+    <div class="mft">
+      <button class="btn btn-ghost btn-sm" onclick="closeOv('ov-owner')">Cancelar</button>
+      <button class="btn btn-gold btn-sm" onclick="saveOwner()">Transferir</button>
     </div>
   </div>
 </div>
@@ -1766,6 +1870,8 @@ window.initApp = async function(){
   // Re-apply after short delay to ensure DOM is ready
   setTimeout(()=>{ applyAccessRestrictions(); updateSbUser(); }, 300);
   loadGlossary();
+  loadWhitelistUsers();
+  loadMatrixManual();
   // ensure home page is visible
   document.querySelectorAll('.page').forEach(x=>x.classList.remove('on'));
   document.querySelectorAll('.sb-link').forEach(x=>x.classList.remove('on'));
@@ -1819,6 +1925,13 @@ function applyAccessRestrictions(){
   document.querySelectorAll('[onclick*="openNewProject"]').forEach(b => {
     b.style.display = isAdmin ? '' : 'none';
   });
+
+  // Acesso & Usuários sidebar link — admin+ only
+  const nlAccess = document.getElementById('nl-access');
+  if (nlAccess) nlAccess.style.display = isAdmin ? '' : 'none';
+
+  // Sistema menu label — hide entirely if only one item visible
+  // (handled by hiding the link above)
 }
 
 // ── Permission matrix render ──
@@ -2231,6 +2344,8 @@ function editProj(id){
   // collect kpis from textarea
   const kpiTxt=document.getElementById('wz-kpis-txt');
   if(kpiTxt) wz.kpis=kpiTxt.value.split('\n').map(x=>x.trim()).filter(Boolean);
+  const mval=document.getElementById('wz-mval'); if(mval) wz.matrixVal=mval.value;
+  const mcmp=document.getElementById('wz-mcmp'); if(mcmp) wz.matrixCmp=mcmp.value;
   if(!wz.risks)wz.risks=[]; if(!wz.features)wz.features=[];
   wzStep=0;
   document.getElementById('m-proj-t').textContent='Editar Projeto';
@@ -2565,66 +2680,30 @@ function saveLayers(){
 // PERMISSIONS
 // ═══════════════════════════════════════════════════
 function renderPerms(p){
-  const g=document.getElementById('d-perm-grid');
-  const teams=p.teams||[];
-  if(!teams.length){
-    g.innerHTML=`<div class="empty" style="grid-column:1/-1;padding:20px"><div class="empty-ic">🔐</div><div class="xs txt-muted">Nenhum time cadastrado. Adicione times para controlar o acesso.</div></div>`;
-    return;
-  }
-  g.innerHTML=teams.map((t,ti)=>`
-    <div class="team-card">
-      <div class="team-name-row">
-        <div>
-          <div class="team-name">${esc(t.name)}</div>
-          ${t.members?`<div class="xxs txt-dim mt1">👥 ${esc(t.members)}</div>`:''}
-        </div>
-        <button class="btn btn-red btn-xs btn-ic" onclick="removeTeam(${ti})">✕</button>
-      </div>
-      <div class="proj-perms">
-        <div class="xxs mono txt-dim" style="letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px">Acesso por Projeto</div>
-        ${S.projects.map(proj=>`
-          <div class="perm-row">
-            <span class="perm-name">${esc((proj.name||'').slice(0,28))}${(proj.name||'').length>28?'...':''}</span>
-            <div class="perm-toggle">
-              <button class="perm-btn ${t.perms?.[proj.id]==='view'?'on view':''}" onclick="togglePerm(${ti},'${proj.id}','view')">Ver</button>
-              <button class="perm-btn ${t.perms?.[proj.id]==='edit'?'on edit':''}" onclick="togglePerm(${ti},'${proj.id}','edit')">Editar</button>
-              <button class="perm-btn ${t.perms?.[proj.id]==='none'?'on none':''}" onclick="togglePerm(${ti},'${proj.id}','none')">Bloqueado</button>
-            </div>
-          </div>`).join('')}
-      </div>
-    </div>`).join('');
+  const ownerEl=document.getElementById('proj-owner-name');
+  if(ownerEl){ const ou=(S.whitelistUsers||[]).find(u=>u.email===p.owner); ownerEl.textContent=ou?ou.name||ou.email:(p.owner||'Não definido'); }
+  const r=curRole(), canEdit=canManageProject(p);
+  const chBtn=document.getElementById('btn-change-owner'); if(chBtn) chBtn.style.display=canEdit?'':'none';
+  const addBtn=document.getElementById('btn-add-member'); if(addBtn) addBtn.style.display=canEdit?'':'none';
+  const g=document.getElementById('d-perm-grid'); if(!g) return;
+  const members=p.members||[];
+  if(!members.length){ g.innerHTML='<div class="empty" style="padding:20px"><div class="empty-ic">👥</div><div class="xs txt-muted">Nenhum usuário vinculado. Clique em "+ Vincular Usuário".</div></div>'; return; }
+  const PERMS=[{key:'view',label:'👁 Ver'},{key:'edit',label:'✏️ Editar'},{key:'meeting',label:'📅 Reuniões'},{key:'export',label:'📄 Exportar'}];
+  g.innerHTML=members.map((m,mi)=>{
+    const u=(S.whitelistUsers||[]).find(x=>x.email===m.email)||{name:m.email};
+    return '<div class="team-card" style="margin-bottom:10px"><div class="team-name-row"><div style="display:flex;align-items:center;gap:10px"><div style="width:34px;height:34px;border-radius:50%;background:var(--s3);display:flex;align-items:center;justify-content:center">👤</div><div><div class="team-name">'+esc(u.name||m.email)+'</div><div class="xxs txt-dim mono">'+esc(m.email)+'</div></div></div>'+(canEdit?'<button class="btn btn-red btn-xs btn-ic" onclick="removeMember('+mi+')">✕</button>':'')+'</div><div style="margin-top:10px"><div class="xxs mono txt-dim" style="letter-spacing:1px;text-transform:uppercase;margin-bottom:8px">Permissões</div><div style="display:flex;gap:6px;flex-wrap:wrap">'+PERMS.map(pp=>{ const on=(m.perms||[]).includes(pp.key); return '<button class="perm-btn'+(on?' on':'')+'"'+(canEdit?' onclick="toggleMemberPerm('+mi+',\''+pp.key+'\')"':' disabled')+'>'+pp.label+'</button>'; }).join('')+'</div></div></div>';
+  }).join('');
 }
-
-function togglePerm(ti,pid,lvl){
-  const p=S.projects.find(x=>x.id===S.curId); if(!p)return;
-  if(!p.teams[ti].perms)p.teams[ti].perms={};
-  p.teams[ti].perms[pid]=lvl;
-  renderPerms(p);
-}
-
-function removeTeam(ti){
-  const p=S.projects.find(x=>x.id===S.curId); if(!p)return;
-  p.teams.splice(ti,1);
-  renderPerms(p);
-}
-
-function addTeam(){ openOv('ov-team'); }
-function saveTeam(){
-  const nm=document.getElementById('team-nm').value.trim();
-  if(!nm){alert('Nome do time obrigatório');return;}
-  const p=S.projects.find(x=>x.id===S.curId); if(!p)return;
-  if(!p.teams)p.teams=[];
-  const lvl=document.getElementById('team-lvl').value;
-  const perms={};
-  S.projects.forEach(pr=>perms[pr.id]=lvl);
-  p.teams.push({id:uid(),name:nm,members:gv('team-mb'),perms});
-  saveS('projetos',p.id,p); closeOv('ov-team'); renderPerms(p); toast('Time adicionado!');
-}
-function savePerms(){
-  const p=S.projects.find(x=>x.id===S.curId); if(p) saveS('projetos',p.id,p);
-  toast('Permissões salvas!');
-}
-
+function canManageProject(p){ const r=curRole(); if(['zeus','admin'].includes(r)) return true; return p.owner===window._curUser?.email; }
+function toggleMemberPerm(mi,key){ const p=S.projects.find(x=>x.id===S._curProj); if(!p) return; if(!p.members[mi].perms)p.members[mi].perms=[]; const idx=p.members[mi].perms.indexOf(key); if(idx>=0)p.members[mi].perms.splice(idx,1); else p.members[mi].perms.push(key); renderPerms(p); }
+function removeMember(mi){ const p=S.projects.find(x=>x.id===S._curProj); if(!p) return; if(!confirm('Remover usuário?')) return; p.members.splice(mi,1); renderPerms(p); toast('Usuário removido!'); }
+function openAddMember(){ const p=S.projects.find(x=>x.id===S._curProj); if(!p) return; const ex=(p.members||[]).map(m=>m.email); const av=(S.whitelistUsers||[]).filter(u=>!ex.includes(u.email)&&u.email!==p.owner); const sel=document.getElementById('member-sel'); if(sel) sel.innerHTML=av.length?'<option value="">Selecionar...</option>'+av.map(u=>'<option value="'+esc(u.email)+'">'+esc(u.name||u.email)+' ('+esc(u.role)+')</option>').join(''):'<option value="">Nenhum usuário disponível</option>'; ['view','edit','meeting','export'].forEach(k=>{const el=document.getElementById('mp-'+k);if(el)el.checked=k==='view';}); openOv('ov-member'); }
+function saveMember(){ const email=document.getElementById('member-sel')?.value; if(!email){alert('Selecione um usuário');return;} const p=S.projects.find(x=>x.id===S._curProj); if(!p) return; if(!p.members)p.members=[]; const perms=['view','edit','meeting','export'].filter(k=>document.getElementById('mp-'+k)?.checked); p.members.push({email,perms}); saveS('projetos',p.id,p); closeOv('ov-member'); renderPerms(p); toast('Usuário vinculado!'); }
+function openChangeOwner(){ const p=S.projects.find(x=>x.id===S._curProj); if(!p) return; const sel=document.getElementById('owner-sel'); if(sel) sel.innerHTML='<option value="">Selecionar...</option>'+(S.whitelistUsers||[]).map(u=>'<option value="'+esc(u.email)+'"'+(u.email===p.owner?' selected':'')+'>'+esc(u.name||u.email)+'</option>').join(''); openOv('ov-owner'); }
+function saveOwner(){ const email=document.getElementById('owner-sel')?.value; if(!email){alert('Selecione o novo dono');return;} const p=S.projects.find(x=>x.id===S._curProj); if(!p) return; p.owner=email; saveS('projetos',p.id,p); closeOv('ov-owner'); renderPerms(p); toast('Dono transferido!'); }
+function savePerms(){ const p=S.projects.find(x=>x.id===S._curProj); if(p) saveS('projetos',p.id,p); toast('Permissões salvas!'); }
+async function loadWhitelistUsers(){ try{ S.whitelistUsers=await window.fbGetAll('whitelist'); }catch(e){ S.whitelistUsers=[]; } }
+function getVisibleProjects(){ const r=curRole(); if(['zeus','admin'].includes(r)) return S.projects; const email=window._curUser?.email; return S.projects.filter(p=>{ if(p.owner===email) return true; return (p.members||[]).some(m=>m.email===email&&(m.perms||[]).includes('view')); }); }
 // ═══════════════════════════════════════════════════
 // WIZARD
 // ═══════════════════════════════════════════════════
@@ -2664,6 +2743,12 @@ function wzHTML(s){
       <div class="fg"><label>Frequência Relatório</label><select id="wz-frq"><option value="">—</option><option>Diário</option><option>Semanal</option><option>Quinzenal</option><option>Mensal</option><option>Sob demanda</option></select></div>
       <div class="fg"><label>Tempo Atual Gasto</label><input id="wz-ts" placeholder="Ex: 4h / semana"></div>
       <div class="fg"><label>Deadline</label><input id="wz-dl" placeholder="Ex: 45 dias após kickoff"></div>
+      <div class="fg"><label>⚡ Valor para o Negócio <span style="font-size:9px;color:var(--t3)">(Matriz)</span></label>
+        <select id="wz-mval"><option value="">—</option><option value="1">1 — Muito Baixo</option><option value="2">2 — Baixo</option><option value="3">3 — Médio</option><option value="4">4 — Alto</option><option value="5">5 — Muito Alto</option></select>
+      </div>
+      <div class="fg"><label>🔧 Complexidade Técnica <span style="font-size:9px;color:var(--t3)">(Matriz)</span></label>
+        <select id="wz-mcmp"><option value="">—</option><option value="1">1 — Muito Baixa</option><option value="2">2 — Baixa</option><option value="3">3 — Média</option><option value="4">4 — Alta</option><option value="5">5 — Muito Alta</option></select>
+      </div>
       <div class="fg"><label>Tamanho da Equipe</label><select id="wz-tm"><option value="">—</option>${getItems('teamSize').map(t=>'<option'+(wz.teamSize===t?' selected':'')+'>'+esc(t)+'</option>').join('')}</select></div>
       <div class="fg full"><label>Contexto Geral <span class="req">*</span></label><textarea id="wz-ctx" rows="3" placeholder="Descreva o cenário atual. Como o processo funciona hoje?"></textarea></div>
     </div>`;
@@ -3183,6 +3268,182 @@ function toast(msg){
 
 // init — Firebase auth handles initApp after login
 
+
+// ── CANVAS ──
+const CANVAS_Q_TOP = [('💡 Decisão Rápida', 'Quando você precisa tomar uma decisão estratégica rápida, qual é a informação que mais sente falta hoje?'), ('📊 5 Números', 'Se tivesse um painel que resumisse o negócio em 5 números, quais seriam?'), ('😰 Principal Preocupação', 'O que mais te preocupa: produtos vencendo, custo alto da operação, falta de acompanhamento claro...?'), ('⚡ Automatizar', 'Se você pudesse automatizar a resposta para apenas uma pergunta sobre o processo todo dia de manhã, qual seria?'), ('🔮 Prever o Futuro', 'Hoje, se você pudesse prever o futuro, qual insight você olharia?')];
+const CANVAS_Q_BOT = [('❓ Por que quer isso?', 'Por que você quer essas respostas?'), ('💥 Qual o Impacto?', 'Qual o impacto dessas respostas para o negócio?')];
+
+function renderCanvasTab(){
+  const p = S.projects.find(x=>x.id===S._curProj); if(!p) return;
+  const cv = p.canvas || {};
+  const grid = document.getElementById('canvas-grid'); if(!grid) return;
+  const gridBot = document.getElementById('canvas-grid-bot');
+  grid.innerHTML = CANVAS_Q_TOP.map(([label,q],i)=>`
+    <div class="canvas-cell">
+      <div class="canvas-cell-q">${esc(label)}<br><span style="color:var(--t2);font-family:inherit;font-weight:400">${esc(q)}</span></div>
+      <textarea id="cv-${i}" placeholder="Resposta...">${esc(cv['q'+i]||'')}</textarea>
+    </div>`).join('');
+  gridBot.innerHTML = CANVAS_Q_BOT.map(([label,q],i)=>`
+    <div class="canvas-cell">
+      <div class="canvas-cell-q">${esc(label)}<br><span style="color:var(--t2);font-family:inherit;font-weight:400">${esc(q)}</span></div>
+      <textarea id="cv-b${i}" placeholder="Resposta...">${esc(cv['b'+i]||'')}</textarea>
+    </div>`).join('');
+}
+
+async function saveCanvas(){
+  const p = S.projects.find(x=>x.id===S._curProj); if(!p) return;
+  const cv = {};
+  CANVAS_Q_TOP.forEach((_,i)=>{ const el=document.getElementById('cv-'+i); if(el) cv['q'+i]=el.value; });
+  CANVAS_Q_BOT.forEach((_,i)=>{ const el=document.getElementById('cv-b'+i); if(el) cv['b'+i]=el.value; });
+  p.canvas = cv;
+  await saveS('projetos', p.id, p);
+  toast('Canvas salvo!');
+}
+
+// ── MATRIX ──
+let MX_MANUAL = []; // manual items
+
+function getMatrixItems(){
+  // auto from projects
+  const auto = S.projects
+    .filter(p=>p.matrixVal && p.matrixCmp)
+    .map(p=>({id:p.id, name:p.name||'Sem nome', val:+p.matrixVal, cmp:+p.matrixCmp, note:p.desc||'', auto:true}));
+  return [...auto, ...MX_MANUAL];
+}
+
+function renderMatrix(){
+  const canvas = document.getElementById('matrix-canvas'); if(!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  const PAD = 48;
+  ctx.clearRect(0,0,W,H);
+
+  // Background zones
+  const zones = [
+    {color:'rgba(248,113,113,0.25)', pts:[[PAD,PAD],[W-PAD,PAD],[PAD,H-PAD]]}, // high complexity low value = avoid
+    {color:'rgba(250,204,21,0.25)',  pts:[[PAD,PAD],[W-PAD,PAD],[W-PAD,H-PAD],[PAD,H-PAD]]}, // middle = strategic
+    {color:'rgba(74,222,128,0.25)', pts:[[W-PAD,H-PAD],[PAD,H-PAD],[W-PAD,PAD]]}, // low complexity high value = quick win
+  ];
+  zones.forEach(z=>{
+    ctx.beginPath(); ctx.moveTo(z.pts[0][0],z.pts[0][1]);
+    z.pts.slice(1).forEach(p=>ctx.lineTo(p[0],p[1]));
+    ctx.closePath(); ctx.fillStyle=z.color; ctx.fill();
+  });
+
+  // Grid lines
+  ctx.strokeStyle='rgba(255,255,255,0.08)'; ctx.lineWidth=1;
+  for(let i=1;i<=4;i++){
+    const x=PAD+(W-2*PAD)*i/5, y=PAD+(H-2*PAD)*i/5;
+    ctx.beginPath();ctx.moveTo(x,PAD);ctx.lineTo(x,H-PAD);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(PAD,y);ctx.lineTo(W-PAD,y);ctx.stroke();
+  }
+
+  // Axes
+  ctx.strokeStyle='rgba(255,255,255,0.3)'; ctx.lineWidth=2;
+  ctx.beginPath();ctx.moveTo(PAD,PAD);ctx.lineTo(PAD,H-PAD);ctx.lineTo(W-PAD,H-PAD);ctx.stroke();
+
+  // Axis labels
+  ctx.fillStyle='rgba(255,255,255,0.5)';ctx.font='11px monospace';ctx.textAlign='center';
+  ctx.fillText('Valor para o Negócio',W/2,H-10);
+  ctx.save();ctx.translate(14,H/2);ctx.rotate(-Math.PI/2);ctx.fillText('Complexidade Técnica',0,0);ctx.restore();
+
+  // Tick labels
+  ctx.font='9px monospace';ctx.fillStyle='rgba(255,255,255,0.35)';
+  for(let i=1;i<=5;i++){
+    const x=PAD+(W-2*PAD)*(i-1)/4;
+    const y=H-PAD-(H-2*PAD)*(i-1)/4;
+    ctx.textAlign='center'; ctx.fillText(i,x,H-PAD+14);
+    ctx.textAlign='right'; ctx.fillText(i,PAD-6,y+4);
+  }
+
+  // Items
+  const items = getMatrixItems();
+  items.forEach(item=>{
+    const x = PAD+(W-2*PAD)*(item.val-1)/4;
+    const y = H-PAD-(H-2*PAD)*(item.cmp-1)/4;
+    // dot color by zone
+    const isQuickWin = item.val >= item.cmp+1;
+    const isAvoid = item.cmp >= item.val+2;
+    const color = isQuickWin ? '#4ade80' : isAvoid ? '#f87171' : '#facc15';
+    ctx.beginPath();ctx.arc(x,y,7,0,Math.PI*2);
+    ctx.fillStyle=color+'99';ctx.fill();
+    ctx.strokeStyle=color;ctx.lineWidth=2;ctx.stroke();
+    // label
+    ctx.fillStyle='rgba(255,255,255,0.9)';ctx.font='bold 10px monospace';ctx.textAlign='center';
+    const name = item.name.length>12 ? item.name.slice(0,11)+'…' : item.name;
+    ctx.fillText(name,x,y-11);
+  });
+
+  renderMatrixList(items);
+}
+
+function renderMatrixList(items){
+  const cont = document.getElementById('matrix-items-list'); if(!cont) return;
+  if(!items.length){ cont.innerHTML='<div style="color:var(--t3);font-size:11px">Nenhum item. Adicione manualmente ou defina Valor/Complexidade nos projetos.</div>'; return; }
+  const isQW = i => i.val >= i.cmp+1;
+  const isAv = i => i.cmp >= i.val+2;
+  cont.innerHTML = items.map(item=>{
+    const badge = isQW(item) ? ['Quick Win','#4ade80'] : isAv(item) ? ['Evitar','#f87171'] : ['Estratégico','#facc15'];
+    return `<div class="mx-item">
+      <div>
+        <div class="mx-item-name">${esc(item.name)}</div>
+        <div class="mx-item-scores">V:${item.val} C:${item.cmp}${item.auto?' · projeto':''}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span class="mx-badge" style="background:${badge[1]}22;color:${badge[1]};border:1px solid ${badge[1]}44">${badge[0]}</span>
+        ${!item.auto?`<button class="btn btn-red btn-xs btn-ic" onclick="removeManualItem('${item.id}')">✕</button>`:''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function openAddMatrixItem(){ 
+  document.getElementById('mx-name').value='';
+  document.getElementById('mx-val').value='3';
+  document.getElementById('mx-cmp').value='3';
+  document.getElementById('mx-note').value='';
+  openOv('ov-matrix'); 
+}
+
+async function saveMatrixItem(){
+  const name = document.getElementById('mx-name')?.value.trim();
+  if(!name){alert('Nome obrigatório');return;}
+  const item = {
+    id: uid(), name,
+    val: +document.getElementById('mx-val').value,
+    cmp: +document.getElementById('mx-cmp').value,
+    note: document.getElementById('mx-note')?.value||'',
+    auto: false
+  };
+  MX_MANUAL.push(item);
+  await window.fbSave('settings','matrixManual',{items:MX_MANUAL});
+  closeOv('ov-matrix');
+  renderMatrix();
+  toast('Item adicionado!');
+}
+
+function removeManualItem(id){
+  MX_MANUAL = MX_MANUAL.filter(x=>x.id!==id);
+  window.fbSave('settings','matrixManual',{items:MX_MANUAL});
+  renderMatrix();
+}
+
+async function clearManualItems(){
+  if(!confirm('Remover todos os itens manuais?')) return;
+  MX_MANUAL=[];
+  await window.fbSave('settings','matrixManual',{items:[]});
+  renderMatrix();
+  toast('Itens manuais removidos!');
+}
+
+async function loadMatrixManual(){
+  try{
+    const snap = await window.fbGetAll('settings');
+    const mx = snap.find(d=>d.id==='matrixManual');
+    if(mx?.items) MX_MANUAL=mx.items;
+  }catch(e){}
+}
+
 // ── GLOSSARY ──
 let GL = [["DISCOVERY", "Fase de levantamento de requisitos técnicos e de negócio antes do desenvolvimento."], ["BRONZE LAYER", "Camada com dado bruto da fonte. Renomeação de colunas para padrão em inglês (snake_case)."], ["SILVER LAYER", "Camada de transformação: joins, colunas calculadas (ex: país + estado = location), filtros (≥0)."], ["GOLD LAYER", "Camada de negócio: KPIs, agregações, marts prontos para BI e relatórios."], ["ETL", "Extract, Transform, Load — extrair dados, transformar e carregar em outro sistema."], ["CHAVE PRIMÁRIA (PK)", "Campo que identifica unicamente cada registro. Ex: id_viagem, id_motorista."], ["CHAVE ESTRANGEIRA (FK)", "Campo que referencia a PK de outra tabela, criando relacionamento entre entidades."], ["STAR SCHEMA", "Modelo com tabela FATO central conectada a tabelas de DIMENSÃO. Padrão para BI e DW."], ["KPI", "Key Performance Indicator — indicadores que medem se os objetivos foram alcançados."], ["MVP", "Minimum Viable Product — versão mínima que entrega valor real ao usuário final."], ["SCHEDULER", "Sistema que executa tarefas automaticamente em horários definidos. Ex: Airflow, Cron."], ["LGPD", "Lei Geral de Proteção de Dados (13.709/2018). Define regras para uso de dados pessoais no Brasil."], ["CDC", "Change Data Capture — captura mudanças em tempo real no banco de dados (insert, update, delete)."], ["LAKEHOUSE", "Arquitetura que combina Data Lake (armazenamento flexível) com Data Warehouse (queries SQL)."], ["ONELAKE", "Storage centralizado do Microsoft Fabric — único lugar para todos os dados da organização."], ["FABRIC PIPELINE", "Equivalente ao Azure Data Factory dentro do Microsoft Fabric para orquestrar fluxos de dados."], ["PYSPARK", "Python com Apache Spark — processa grandes volumes de dados em paralelo no Fabric/Databricks."], ["DAX", "Data Analysis Expressions — linguagem de fórmulas do Power BI para criar métricas e cálculos."], ["DATAFLOW GEN2", "Conector visual do Fabric para extrair e transformar dados sem código (Power Query)."], ["SLA", "Service Level Agreement — acordo de nível de serviço. Ex: relatório disponível até 8h toda segunda."]];
 
@@ -3194,10 +3455,12 @@ function renderGlossary(){
   const renderCol = arr => arr.map(([t,d])=>`<div class="gl"><div class="gl-t">${esc(t)}</div><div class="gl-d">${esc(d)}</div></div>`).join('');
   cont.innerHTML = '<div>'+renderCol(col1)+'</div><div>'+renderCol(col2)+'</div>';
   const ct = document.getElementById('gl-count'); if(ct) ct.textContent = GL.length+' termos';
-  // show edit btn for zeus/admin
-  const r=curRole();
-  const editRow=document.getElementById('gl-edit-row'); if(editRow) editRow.style.display=['zeus','admin'].includes(r)?'flex':'none';
-  const editHint=document.getElementById('gl-edit-hint'); if(editHint) editHint.style.display=['zeus','admin'].includes(r)?'':'none';
+  // show edit btn for zeus/admin — wait for _curUser if needed
+  const r = window._curUser?.role || 'zeus';
+  const editRow  = document.getElementById('gl-edit-row');
+  const editHint = document.getElementById('gl-edit-hint');
+  if(editRow)  editRow.style.display  = ['zeus','admin'].includes(r)?'flex':'none';
+  if(editHint) editHint.style.display = ['zeus','admin'].includes(r)?'':'none';
 }
 
 function openGlossaryEditor(){
